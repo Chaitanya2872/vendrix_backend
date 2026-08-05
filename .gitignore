@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.py[cod]
+iotiq.db
+storage/
+.env
