@@ -71,13 +71,27 @@ class Invoice(IdMixin, Base):
     document_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id"), nullable=True)
 
 
+class Purchase(IdMixin, Base):
+    __tablename__ = "purchases"
+    purchase_number: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    vendor_id: Mapped[str] = mapped_column(ForeignKey("vendors.id"), index=True)
+    reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    quantity: Mapped[float] = mapped_column(Float, default=0)
+    total_amount: Mapped[float] = mapped_column(Float, default=0)
+    expected_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(30), default="DRAFT")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class Delivery(IdMixin, Base):
     __tablename__ = "deliveries"
     delivery_number: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     vendor_id: Mapped[str] = mapped_column(ForeignKey("vendors.id"), index=True)
+    purchase_id: Mapped[str | None] = mapped_column(ForeignKey("purchases.id"), nullable=True, index=True)
     vehicle_id: Mapped[str | None] = mapped_column(ForeignKey("vehicles.id"), nullable=True)
     driver_id: Mapped[str | None] = mapped_column(ForeignKey("drivers.id"), nullable=True)
     destination: Mapped[str] = mapped_column(String(250))
+    recipient: Mapped[str | None] = mapped_column(String(150), nullable=True)
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     status: Mapped[str] = mapped_column(String(30), default="SCHEDULED")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
