@@ -15,6 +15,7 @@ class VendorCreate(BaseModel):
 
 
 class VendorUpdate(BaseModel):
+    vendor_code: str | None = Field(default=None, min_length=2, max_length=30)
     legal_name: str | None = Field(default=None, min_length=2, max_length=200)
     gstin: str | None = Field(default=None, max_length=15)
     category: str | None = None

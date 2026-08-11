@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import engine
-from app.models import User
+from app.models import User, VendorCategory
 from app.modules.anpr.router import router as anpr_router
 from app.modules.approvals.router import router as approvals_router
 from app.modules.audit.router import router as audit_router
@@ -31,11 +31,12 @@ from app.modules.reports.router import router as reports_router
 from app.modules.users.router import router as users_router
 from app.modules.vehicles.router import router as vehicles_router
 from app.modules.vendors.router import router as vendors_router
+from app.modules.vendor_categories.router import router as vendor_categories_router
 
 app = FastAPI(title=settings.app_name, version="0.1.0", openapi_url="/api/v1/openapi.json")
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins.split(","), allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?", allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-for router in (auth_router, users_router, vendors_router, vehicles_router, drivers_router, invoices_router, payments_router, approvals_router, documents_router, purchases_router, deliveries_router, anpr_router, reports_router, mobile_router, audit_router):
+for router in (auth_router, users_router, vendors_router, vendor_categories_router, vehicles_router, drivers_router, invoices_router, payments_router, approvals_router, documents_router, purchases_router, deliveries_router, anpr_router, reports_router, mobile_router, audit_router):
     app.include_router(router, prefix="/api/v1")
 
 
@@ -56,6 +57,10 @@ def initialize() -> None:
     with Session(engine) as db:
         if not db.scalar(select(User.id).limit(1)):
             db.add(User(email="admin@iotiq.example.com", full_name="System Administrator", password_hash=hash_password("Admin@123"), role="ADMIN"))
+            db.commit()
+        if not db.scalar(select(VendorCategory.id).limit(1)):
+            default_categories = ["Transport & Logistics", "Construction", "Equipment Rental", "Materials Supplier", "Professional Services", "Maintenance", "Office Supplies", "Other"]
+            db.add_all(VendorCategory(name=name) for name in default_categories)
             db.commit()
 
 

@@ -19,6 +19,10 @@ class VendorService:
 
     def update(self, db: Session, vendor_id: str, data: VendorUpdate, actor_id: str) -> Vendor:
         vendor = self.get(db, vendor_id); changes = data.model_dump(exclude_unset=True)
+        new_code = changes.get("vendor_code")
+        if new_code and new_code != vendor.vendor_code:
+            existing = self.repository.by_code(db, new_code)
+            if existing: raise HTTPException(409, "Vendor code already exists")
         for key, value in changes.items(): setattr(vendor, key, value)
         db.add(AuditLog(actor_id=actor_id, action="UPDATE", resource_type="vendors", resource_id=vendor.id, details={"fields": list(changes)}))
         try: db.commit()

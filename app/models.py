@@ -36,6 +36,11 @@ class Vendor(IdMixin, Base):
     bank_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
+class VendorCategory(IdMixin, Base):
+    __tablename__ = "vendor_categories"
+    name: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+
+
 class Vehicle(IdMixin, Base):
     __tablename__ = "vehicles"
     vendor_id: Mapped[str] = mapped_column(ForeignKey("vendors.id"), index=True)

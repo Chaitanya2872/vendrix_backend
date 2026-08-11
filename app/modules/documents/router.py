@@ -13,11 +13,12 @@ from app.common.dependencies import current_user
 from app.core.config import settings
 from app.db.session import get_db
 from app.models import AuditLog, Document, User
+from app.modules.documents.schemas import DocumentListItem
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 class DocumentReview(BaseModel): fields: dict[str, Any]
 
-@router.get("")
+@router.get("", response_model=list[DocumentListItem])
 def list_documents(db: Session = Depends(get_db), _: User = Depends(current_user)):
     return db.scalars(select(Document).order_by(Document.created_at.desc())).all()
 
