@@ -1,7 +1,7 @@
 from datetime import datetime, date, timezone
 from uuid import uuid4
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, JSON, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, Numeric, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 
@@ -66,7 +66,7 @@ class Driver(IdMixin, Base):
 
 class Invoice(IdMixin, Base):
     __tablename__ = "invoices"
-    vendor_id: Mapped[str] = mapped_column(ForeignKey("vendors.id"), index=True)
+    vendor_id: Mapped[str | None] = mapped_column(ForeignKey("vendors.id"), nullable=True, index=True)
     invoice_number: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     invoice_date: Mapped[date] = mapped_column(Date)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -74,6 +74,42 @@ class Invoice(IdMixin, Base):
     tax_amount: Mapped[float] = mapped_column(Float, default=0)
     status: Mapped[str] = mapped_column(String(30), default="DRAFT")
     document_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id"), nullable=True)
+    vendor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    vendor_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    vendor_gstin: Mapped[str | None] = mapped_column(String(15), nullable=True, index=True)
+    vendor_pan: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    vendor_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    vendor_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    customer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    customer_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    customer_gstin: Mapped[str | None] = mapped_column(String(15), nullable=True, index=True)
+    customer_pan: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    customer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    customer_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    purchase_order_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    purchase_order_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(8), nullable=True, default="INR")
+    subtotal: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    discount_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    taxable_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    cgst_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    sgst_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    igst_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    round_off: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    total_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    amount_paid: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    amount_due: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    payment_terms: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    place_of_supply: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    parser_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    used_ocr: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    parsing_confidence: Mapped[float | None] = mapped_column(Numeric(4, 2), nullable=True)
+    parsing_warnings: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    parsing_validation_errors: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    line_items: Mapped[list["InvoiceLineItem"]] = relationship(
+        back_populates="invoice", cascade="all, delete-orphan"
+    )
 
 
 class Purchase(IdMixin, Base):
@@ -132,6 +168,17 @@ class Document(IdMixin, Base):
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     extracted_fields: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     review_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Human-facing identifier (DOC-2026-000001). Nullable because documents
+    # uploaded before the OCR pipeline existed have none, and backfilling
+    # them would invent numbers nobody ever saw.
+    document_number: Mapped[str | None] = mapped_column(String(24), unique=True, nullable=True, index=True)
+    # Content hash, so re-uploading the same file is recognised instead of
+    # paying for OCR twice. Indexed because it is looked up on every upload.
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Format as *detected from the bytes*, not as claimed by the extension.
+    file_format: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class AuditLog(IdMixin, Base):

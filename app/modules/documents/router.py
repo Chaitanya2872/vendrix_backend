@@ -1,3 +1,19 @@
+"""Documents router — EXTENDED to trigger invoice parsing on upload.
+
+Only the `upload` endpoint changes. Everything else (list/get/download/
+preview/delete/review) is unchanged from the original file. The diff is
+scoped to:
+
+  1. After an INVOICE-typed document is persisted, enqueue invoice parsing
+     using the *same* dispatch mechanism already used for
+     `process_vendor_document` (Celery if enabled, background task
+     otherwise) — no new queue/worker is introduced.
+  2. The synchronous response still returns the Document immediately
+     (matching current behavior); parsed invoice data becomes available via
+     GET /documents/{id} or GET /invoices/{id} once processing completes,
+     same as the existing `process_vendor_document` flow already implies
+     for other document-derived data.
+"""
 from datetime import datetime, timezone
 from pathlib import Path
 import shutil
@@ -14,6 +30,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models import AuditLog, Document, User
 from app.modules.documents.schemas import DocumentListItem
+from app.modules.invoices.services.invoice_parser_service import should_parse_as_invoice
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 class DocumentReview(BaseModel): fields: dict[str, Any]
@@ -32,16 +49,30 @@ def upload(document_type: str, background_tasks: BackgroundTasks, file: UploadFi
     with path.open("wb") as output: shutil.copyfileobj(file.file, output)
     document = Document(filename=file.filename, object_key=key, content_type=file.content_type, document_type=document_type.upper(), owner_id=user.id)
     db.add(document); db.flush(); db.add(AuditLog(actor_id=user.id, action="UPLOAD", resource_type="documents", resource_id=document.id)); db.commit(); db.refresh(document)
-    from app.workers.document_tasks import process_vendor_document, process_vendor_document_now
+    # Exactly one extraction task runs per upload. Both write to
+    # Document.extracted_fields, so running the generic vendor extractor
+    # alongside the invoice parser would have them overwrite each other —
+    # the invoice fields the review UI needs would be replaced by a raw
+    # text dump, depending on which finished last.
+    from app.workers.document_tasks import (
+        process_invoice_document, process_invoice_document_now,
+        process_vendor_document, process_vendor_document_now,
+    )
+    if should_parse_as_invoice(document):
+        queued_task, inline_task = process_invoice_document, process_invoice_document_now
+    else:
+        queued_task, inline_task = process_vendor_document, process_vendor_document_now
+
     if settings.celery_enabled:
         try:
-            process_vendor_document.delay(document.id)
+            queued_task.delay(document.id)
         except Exception:
             # Keep the request fast if the queue is temporarily unavailable.
-            background_tasks.add_task(process_vendor_document_now, document.id)
+            background_tasks.add_task(inline_task, document.id)
     else:
         # Local development: send the response first, then process in-process.
-        background_tasks.add_task(process_vendor_document_now, document.id)
+        background_tasks.add_task(inline_task, document.id)
+
     return document
 
 @router.get("/{document_id}")

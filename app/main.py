@@ -23,6 +23,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.documents.router import router as documents_router
 from app.modules.deliveries.router import router as deliveries_router
 from app.modules.drivers.router import router as drivers_router
+from app.modules.invoices.extraction_router import router as invoice_extraction_router
 from app.modules.invoices.router import router as invoices_router
 from app.modules.mobile.router import router as mobile_router
 from app.modules.purchases.router import router as purchases_router
@@ -36,7 +37,7 @@ from app.modules.vendor_categories.router import router as vendor_categories_rou
 app = FastAPI(title=settings.app_name, version="0.1.0", openapi_url="/api/v1/openapi.json")
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins.split(","), allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?", allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-for router in (auth_router, users_router, vendors_router, vendor_categories_router, vehicles_router, drivers_router, invoices_router, payments_router, approvals_router, documents_router, purchases_router, deliveries_router, anpr_router, reports_router, mobile_router, audit_router):
+for router in (auth_router, users_router, vendors_router, vendor_categories_router, vehicles_router, drivers_router, invoices_router, invoice_extraction_router, payments_router, approvals_router, documents_router, purchases_router, deliveries_router, anpr_router, reports_router, mobile_router, audit_router):
     app.include_router(router, prefix="/api/v1")
 
 
@@ -54,6 +55,57 @@ def initialize() -> None:
                 connection.execute(text("ALTER TABLE deliveries ADD COLUMN purchase_id VARCHAR(36)"))
             if "recipient" not in columns:
                 connection.execute(text("ALTER TABLE deliveries ADD COLUMN recipient VARCHAR(150)"))
+    # Keep existing lightweight databases compatible with invoice parsing.
+    if "invoices" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("invoices")}
+        invoice_columns = {
+            "vendor_name": "VARCHAR(255)", "vendor_address": "TEXT",
+            "vendor_gstin": "VARCHAR(15)", "vendor_pan": "VARCHAR(10)",
+            "vendor_email": "VARCHAR(255)", "vendor_phone": "VARCHAR(32)",
+            "customer_name": "VARCHAR(255)", "customer_address": "TEXT",
+            "customer_gstin": "VARCHAR(15)", "customer_pan": "VARCHAR(10)",
+            "customer_email": "VARCHAR(255)", "customer_phone": "VARCHAR(32)",
+            "purchase_order_number": "VARCHAR(64)", "purchase_order_date": "DATE",
+            "currency": "VARCHAR(8)", "subtotal": "NUMERIC(14, 2)",
+            "discount_amount": "NUMERIC(14, 2)", "taxable_amount": "NUMERIC(14, 2)",
+            "cgst_amount": "NUMERIC(14, 2)", "sgst_amount": "NUMERIC(14, 2)",
+            "igst_amount": "NUMERIC(14, 2)", "round_off": "NUMERIC(14, 2)",
+            "total_amount": "NUMERIC(14, 2)", "amount_paid": "NUMERIC(14, 2)",
+            "amount_due": "NUMERIC(14, 2)", "payment_terms": "VARCHAR(128)",
+            "place_of_supply": "VARCHAR(128)", "parser_name": "VARCHAR(64)",
+            "parser_version": "VARCHAR(16)", "used_ocr": "VARCHAR(8)",
+            "parsing_confidence": "NUMERIC(4, 2)", "parsing_warnings": "JSON",
+            "parsing_validation_errors": "JSON",
+        }
+        with engine.begin() as connection:
+            for name, sql_type in invoice_columns.items():
+                if name not in columns:
+                    connection.execute(text(f"ALTER TABLE invoices ADD COLUMN {name} {sql_type}"))
+    # Keep existing lightweight databases compatible with the OCR pipeline.
+    # The unique index on document_number is created separately because
+    # SQLite cannot add a UNIQUE column to a populated table.
+    if "documents" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("documents")}
+        document_columns = {
+            "document_number": "VARCHAR(24)", "sha256": "VARCHAR(64)",
+            "size_bytes": "INTEGER", "file_format": "VARCHAR(10)",
+            "page_count": "INTEGER",
+        }
+        indexes = {index["name"] for index in inspector.get_indexes("documents")}
+        with engine.begin() as connection:
+            for name, sql_type in document_columns.items():
+                if name not in columns:
+                    connection.execute(text(f"ALTER TABLE documents ADD COLUMN {name} {sql_type}"))
+            if "ix_documents_document_number" not in indexes:
+                connection.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_documents_document_number "
+                    "ON documents (document_number)"
+                ))
+            if "ix_documents_sha256" not in indexes:
+                connection.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_documents_sha256 ON documents (sha256)"
+                ))
+
     with Session(engine) as db:
         if not db.scalar(select(User.id).limit(1)):
             db.add(User(email="admin@iotiq.example.com", full_name="System Administrator", password_hash=hash_password("Admin@123"), role="ADMIN"))

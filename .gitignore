@@ -4,3 +4,11 @@ __pycache__/
 iotiq.db
 storage/
 .env
+
+# OCR model training artifacts. The corpus and the scratch renders are
+# regenerable from a seed (python -m app.ml.ocr.train) and run to hundreds of
+# MB; the trained model and its evaluation report are small and worth keeping,
+# so they are deliberately not ignored.
+app/ml/ocr/artifacts/corpus.jsonl
+app/ml/ocr/artifacts/work/
+app/ml/ocr/artifacts/train.log

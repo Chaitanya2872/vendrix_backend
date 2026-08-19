@@ -1,21 +1,89 @@
+# On-premise deployment. Nothing here reaches outside the compose network:
+# the database, the queue and the OCR models are all local.
+#
+# Three things differ from the previous file, and each was a defect the
+# invoice pipeline would have hit on the first upload:
+#
+#   * **A shared storage volume.** The API writes the uploaded file to disk
+#     and the worker reads it back. With per-container filesystems the worker
+#     looked for a file that only ever existed in the API container.
+#   * **A shared database.** `sqlite:///./iotiq.db` gave the API and the
+#     worker one file each, so progress the worker wrote was invisible to the
+#     status endpoint the client was polling — a document stuck at 0% forever.
+#   * **CELERY_ENABLED.** Left unset it defaults to false, so the API
+#     processed everything in-process and the worker container sat idle.
+
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql+psycopg2://iotiq:${POSTGRES_PASSWORD:-iotiq}@postgres:5432/iotiq
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/1
+  CELERY_ENABLED: "true"
+  STORAGE_PATH: /data/storage
+  JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+  # Model weights are baked into the image at build time; point the runtime
+  # at the same place the build wrote them. The variable name is PaddleX's
+  # own (paddlex/utils/cache.py) — anything else is silently ignored and the
+  # runtime falls back to ~/.paddlex, which is empty.
+  PADDLE_PDX_CACHE_HOME: /opt/paddlex
+  # Do not probe huggingface/modelscope/aistudio/bos on startup: the weights
+  # are local, and on an isolated network the probe is just TCP timeouts
+  # before the first invoice is read.
+  PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
+  PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT: "0"
+
 services:
   api:
     build: .
     ports: ["8000:8000"]
-    environment:
-      DATABASE_URL: sqlite:///./iotiq.db
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
-    depends_on: [redis]
+    environment: *app-environment
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    restart: unless-stopped
+
   worker:
     build: .
-    command: celery -A app.workers.celery_app.celery_app worker --loglevel=info
+    # `--concurrency 2`, not the CPU count: PaddleOCR is already
+    # multi-threaded internally, so more workers contend for the same cores.
+    # Measured speed-up from four parallel document builders was ~2.1x, not
+    # 4x — see app/ml/ocr/README.md.
+    command: >
+      celery -A app.workers.celery_app.celery_app worker
+      --loglevel=info --concurrency=2
+    environment: *app-environment
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
     environment:
-      DATABASE_URL: sqlite:///./iotiq.db
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-    depends_on: [redis]
+      POSTGRES_USER: iotiq
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iotiq}
+      POSTGRES_DB: iotiq
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # The API creates its schema at startup, so it must not start against a
+      # database that is still initialising.
+      test: ["CMD-SHELL", "pg_isready -U iotiq -d iotiq"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    # Not published to the host: the queue is an internal detail, and an
+    # exposed Redis with no auth is the classic on-premise foothold.
+    expose: ["6379"]
+    restart: unless-stopped
+
+volumes:
+  storage:
+  postgres-data:

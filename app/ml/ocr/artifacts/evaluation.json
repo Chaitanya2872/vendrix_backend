@@ -1,0 +1,850 @@
+{
+  "line_level": {
+    "field_macro_f1": 0.9285,
+    "accuracy": 0.97,
+    "per_label": {
+      "CGST_AMOUNT": {
+        "precision": 0.9683,
+        "recall": 0.9892,
+        "f1": 0.9786,
+        "support": 185
+      },
+      "CUSTOMER_GSTIN": {
+        "precision": 0.7547,
+        "recall": 0.6738,
+        "f1": 0.7119,
+        "support": 420
+      },
+      "CUSTOMER_NAME": {
+        "precision": 0.8522,
+        "recall": 0.8909,
+        "f1": 0.8711,
+        "support": 440
+      },
+      "DUE_DATE": {
+        "precision": 0.9972,
+        "recall": 1.0,
+        "f1": 0.9986,
+        "support": 354
+      },
+      "IGST_AMOUNT": {
+        "precision": 0.9795,
+        "recall": 0.9965,
+        "f1": 0.988,
+        "support": 288
+      },
+      "INVOICE_DATE": {
+        "precision": 0.9875,
+        "recall": 1.0,
+        "f1": 0.9937,
+        "support": 474
+      },
+      "INVOICE_NUMBER": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 479
+      },
+      "LINE_ITEM": {
+        "precision": 0.9925,
+        "recall": 0.9975,
+        "f1": 0.995,
+        "support": 2389
+      },
+      "OTHER": {
+        "precision": 0.9983,
+        "recall": 0.9902,
+        "f1": 0.9942,
+        "support": 7541
+      },
+      "SGST_AMOUNT": {
+        "precision": 0.9375,
+        "recall": 0.9783,
+        "f1": 0.9574,
+        "support": 184
+      },
+      "SUBTOTAL": {
+        "precision": 0.9709,
+        "recall": 0.9873,
+        "f1": 0.979,
+        "support": 473
+      },
+      "TAX_AMOUNT": {
+        "precision": 0.9604,
+        "recall": 0.9844,
+        "f1": 0.9722,
+        "support": 320
+      },
+      "TOTAL_AMOUNT": {
+        "precision": 0.9792,
+        "recall": 0.9874,
+        "f1": 0.9833,
+        "support": 477
+      },
+      "VENDOR_GSTIN": {
+        "precision": 0.738,
+        "recall": 0.8075,
+        "f1": 0.7712,
+        "support": 478
+      },
+      "VENDOR_NAME": {
+        "precision": 0.8804,
+        "recall": 0.8515,
+        "f1": 0.8657,
+        "support": 458
+      }
+    },
+    "per_format": {
+      "docx": {
+        "lines": 2744,
+        "field_macro_f1": 0.9786,
+        "accuracy": 0.988
+      },
+      "jpg": {
+        "lines": 1802,
+        "field_macro_f1": 0.8756,
+        "accuracy": 0.9717
+      },
+      "pdf_native": {
+        "lines": 2689,
+        "field_macro_f1": 0.9222,
+        "accuracy": 0.968
+      },
+      "pdf_scan": {
+        "lines": 1451,
+        "field_macro_f1": 0.8087,
+        "accuracy": 0.9476
+      },
+      "png": {
+        "lines": 1790,
+        "field_macro_f1": 0.8741,
+        "accuracy": 0.9698
+      },
+      "webp": {
+        "lines": 1740,
+        "field_macro_f1": 0.8408,
+        "accuracy": 0.9586
+      },
+      "xlsx": {
+        "lines": 2744,
+        "field_macro_f1": 0.9506,
+        "accuracy": 0.9719
+      }
+    }
+  },
+  "field_level": {
+    "per_format": {
+      "docx": {
+        "documents": 120,
+        "uses_ocr": false,
+        "field_recall": 0.99,
+        "field_precision": 0.99,
+        "ocr_intact_rate": 1.0,
+        "recall_vs_ocr_ceiling": 0.99,
+        "per_label": {
+          "CGST_AMOUNT": {
+            "expected": 47,
+            "correct": 47,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "CUSTOMER_GSTIN": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "CUSTOMER_NAME": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "DUE_DATE": {
+            "expected": 90,
+            "correct": 84,
+            "recall": 0.9333,
+            "precision": 0.9333
+          },
+          "IGST_AMOUNT": {
+            "expected": 73,
+            "correct": 73,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "INVOICE_DATE": {
+            "expected": 120,
+            "correct": 113,
+            "recall": 0.9417,
+            "precision": 0.9417
+          },
+          "INVOICE_NUMBER": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "SGST_AMOUNT": {
+            "expected": 47,
+            "correct": 47,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "SUBTOTAL": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "TAX_AMOUNT": {
+            "expected": 82,
+            "correct": 82,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "TOTAL_AMOUNT": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "VENDOR_GSTIN": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "VENDOR_NAME": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          }
+        }
+      },
+      "jpg": {
+        "documents": 30,
+        "uses_ocr": true,
+        "field_recall": 0.7903,
+        "field_precision": 0.8202,
+        "ocr_intact_rate": 0.921,
+        "recall_vs_ocr_ceiling": 0.8581,
+        "per_label": {
+          "CGST_AMOUNT": {
+            "expected": 11,
+            "correct": 10,
+            "recall": 0.9091,
+            "precision": 0.9091
+          },
+          "CUSTOMER_GSTIN": {
+            "expected": 30,
+            "correct": 15,
+            "recall": 0.5,
+            "precision": 0.5556
+          },
+          "CUSTOMER_NAME": {
+            "expected": 30,
+            "correct": 20,
+            "recall": 0.6667,
+            "precision": 0.7143
+          },
+          "DUE_DATE": {
+            "expected": 24,
+            "correct": 21,
+            "recall": 0.875,
+            "precision": 0.913
+          },
+          "IGST_AMOUNT": {
+            "expected": 19,
+            "correct": 16,
+            "recall": 0.8421,
+            "precision": 0.8421
+          },
+          "INVOICE_DATE": {
+            "expected": 30,
+            "correct": 28,
+            "recall": 0.9333,
+            "precision": 0.9655
+          },
+          "INVOICE_NUMBER": {
+            "expected": 30,
+            "correct": 28,
+            "recall": 0.9333,
+            "precision": 0.9333
+          },
+          "SGST_AMOUNT": {
+            "expected": 11,
+            "correct": 10,
+            "recall": 0.9091,
+            "precision": 0.9091
+          },
+          "SUBTOTAL": {
+            "expected": 30,
+            "correct": 24,
+            "recall": 0.8,
+            "precision": 0.8276
+          },
+          "TAX_AMOUNT": {
+            "expected": 24,
+            "correct": 21,
+            "recall": 0.875,
+            "precision": 0.913
+          },
+          "TOTAL_AMOUNT": {
+            "expected": 30,
+            "correct": 29,
+            "recall": 0.9667,
+            "precision": 0.9667
+          },
+          "VENDOR_GSTIN": {
+            "expected": 30,
+            "correct": 16,
+            "recall": 0.5333,
+            "precision": 0.5517
+          },
+          "VENDOR_NAME": {
+            "expected": 30,
+            "correct": 22,
+            "recall": 0.7333,
+            "precision": 0.7857
+          }
+        }
+      },
+      "pdf_native": {
+        "documents": 120,
+        "uses_ocr": false,
+        "field_recall": 0.8329,
+        "field_precision": 0.9169,
+        "ocr_intact_rate": 0.8637,
+        "recall_vs_ocr_ceiling": 0.9643,
+        "per_label": {
+          "CGST_AMOUNT": {
+            "expected": 47,
+            "correct": 47,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "CUSTOMER_GSTIN": {
+            "expected": 120,
+            "correct": 49,
+            "recall": 0.4083,
+            "precision": 0.8033
+          },
+          "CUSTOMER_NAME": {
+            "expected": 120,
+            "correct": 60,
+            "recall": 0.5,
+            "precision": 0.9231
+          },
+          "DUE_DATE": {
+            "expected": 90,
+            "correct": 84,
+            "recall": 0.9333,
+            "precision": 0.9333
+          },
+          "IGST_AMOUNT": {
+            "expected": 73,
+            "correct": 73,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "INVOICE_DATE": {
+            "expected": 120,
+            "correct": 113,
+            "recall": 0.9417,
+            "precision": 0.9417
+          },
+          "INVOICE_NUMBER": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "SGST_AMOUNT": {
+            "expected": 47,
+            "correct": 47,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "SUBTOTAL": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "TAX_AMOUNT": {
+            "expected": 82,
+            "correct": 82,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "TOTAL_AMOUNT": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "VENDOR_GSTIN": {
+            "expected": 120,
+            "correct": 108,
+            "recall": 0.9,
+            "precision": 0.9
+          },
+          "VENDOR_NAME": {
+            "expected": 120,
+            "correct": 59,
+            "recall": 0.4917,
+            "precision": 0.513
+          }
+        }
+      },
+      "pdf_scan": {
+        "documents": 30,
+        "uses_ocr": true,
+        "field_recall": 0.7337,
+        "field_precision": 0.7695,
+        "ocr_intact_rate": 0.9009,
+        "recall_vs_ocr_ceiling": 0.8144,
+        "per_label": {
+          "CGST_AMOUNT": {
+            "expected": 10,
+            "correct": 8,
+            "recall": 0.8,
+            "precision": 0.8
+          },
+          "CUSTOMER_GSTIN": {
+            "expected": 30,
+            "correct": 18,
+            "recall": 0.6,
+            "precision": 0.6667
+          },
+          "CUSTOMER_NAME": {
+            "expected": 30,
+            "correct": 19,
+            "recall": 0.6333,
+            "precision": 0.6333
+          },
+          "DUE_DATE": {
+            "expected": 21,
+            "correct": 19,
+            "recall": 0.9048,
+            "precision": 0.95
+          },
+          "IGST_AMOUNT": {
+            "expected": 20,
+            "correct": 17,
+            "recall": 0.85,
+            "precision": 0.8947
+          },
+          "INVOICE_DATE": {
+            "expected": 30,
+            "correct": 27,
+            "recall": 0.9,
+            "precision": 0.9
+          },
+          "INVOICE_NUMBER": {
+            "expected": 30,
+            "correct": 30,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "SGST_AMOUNT": {
+            "expected": 10,
+            "correct": 5,
+            "recall": 0.5,
+            "precision": 0.5556
+          },
+          "SUBTOTAL": {
+            "expected": 30,
+            "correct": 22,
+            "recall": 0.7333,
+            "precision": 0.7586
+          },
+          "TAX_AMOUNT": {
+            "expected": 22,
+            "correct": 12,
+            "recall": 0.5455,
+            "precision": 0.6
+          },
+          "TOTAL_AMOUNT": {
+            "expected": 30,
+            "correct": 26,
+            "recall": 0.8667,
+            "precision": 0.963
+          },
+          "VENDOR_GSTIN": {
+            "expected": 30,
+            "correct": 18,
+            "recall": 0.6,
+            "precision": 0.6
+          },
+          "VENDOR_NAME": {
+            "expected": 30,
+            "correct": 16,
+            "recall": 0.5333,
+            "precision": 0.5926
+          }
+        }
+      },
+      "png": {
+        "documents": 30,
+        "uses_ocr": true,
+        "field_recall": 0.785,
+        "field_precision": 0.8262,
+        "ocr_intact_rate": 0.8816,
+        "recall_vs_ocr_ceiling": 0.8905,
+        "per_label": {
+          "CGST_AMOUNT": {
+            "expected": 8,
+            "correct": 3,
+            "recall": 0.375,
+            "precision": 0.375
+          },
+          "CUSTOMER_GSTIN": {
+            "expected": 30,
+            "correct": 18,
+            "recall": 0.6,
+            "precision": 0.6923
+          },
+          "CUSTOMER_NAME": {
+            "expected": 30,
+            "correct": 25,
+            "recall": 0.8333,
+            "precision": 0.8929
+          },
+          "DUE_DATE": {
+            "expected": 23,
+            "correct": 18,
+            "recall": 0.7826,
+            "precision": 0.8571
+          },
+          "IGST_AMOUNT": {
+            "expected": 22,
+            "correct": 19,
+            "recall": 0.8636,
+            "precision": 0.9048
+          },
+          "INVOICE_DATE": {
+            "expected": 30,
+            "correct": 24,
+            "recall": 0.8,
+            "precision": 0.8889
+          },
+          "INVOICE_NUMBER": {
+            "expected": 30,
+            "correct": 29,
+            "recall": 0.9667,
+            "precision": 0.9667
+          },
+          "SGST_AMOUNT": {
+            "expected": 8,
+            "correct": 6,
+            "recall": 0.75,
+            "precision": 0.75
+          },
+          "SUBTOTAL": {
+            "expected": 30,
+            "correct": 23,
+            "recall": 0.7667,
+            "precision": 0.7667
+          },
+          "TAX_AMOUNT": {
+            "expected": 20,
+            "correct": 14,
+            "recall": 0.7,
+            "precision": 0.7368
+          },
+          "TOTAL_AMOUNT": {
+            "expected": 30,
+            "correct": 25,
+            "recall": 0.8333,
+            "precision": 0.8929
+          },
+          "VENDOR_GSTIN": {
+            "expected": 30,
+            "correct": 22,
+            "recall": 0.7333,
+            "precision": 0.7333
+          },
+          "VENDOR_NAME": {
+            "expected": 30,
+            "correct": 26,
+            "recall": 0.8667,
+            "precision": 0.8966
+          }
+        }
+      },
+      "webp": {
+        "documents": 30,
+        "uses_ocr": true,
+        "field_recall": 0.7147,
+        "field_precision": 0.759,
+        "ocr_intact_rate": 0.8313,
+        "recall_vs_ocr_ceiling": 0.8598,
+        "per_label": {
+          "CGST_AMOUNT": {
+            "expected": 18,
+            "correct": 10,
+            "recall": 0.5556,
+            "precision": 0.5882
+          },
+          "CUSTOMER_GSTIN": {
+            "expected": 30,
+            "correct": 18,
+            "recall": 0.6,
+            "precision": 0.6923
+          },
+          "CUSTOMER_NAME": {
+            "expected": 30,
+            "correct": 19,
+            "recall": 0.6333,
+            "precision": 0.6786
+          },
+          "DUE_DATE": {
+            "expected": 22,
+            "correct": 18,
+            "recall": 0.8182,
+            "precision": 0.9
+          },
+          "IGST_AMOUNT": {
+            "expected": 12,
+            "correct": 8,
+            "recall": 0.6667,
+            "precision": 0.7273
+          },
+          "INVOICE_DATE": {
+            "expected": 30,
+            "correct": 27,
+            "recall": 0.9,
+            "precision": 0.9643
+          },
+          "INVOICE_NUMBER": {
+            "expected": 30,
+            "correct": 26,
+            "recall": 0.8667,
+            "precision": 0.8667
+          },
+          "SGST_AMOUNT": {
+            "expected": 18,
+            "correct": 10,
+            "recall": 0.5556,
+            "precision": 0.625
+          },
+          "SUBTOTAL": {
+            "expected": 30,
+            "correct": 18,
+            "recall": 0.6,
+            "precision": 0.6429
+          },
+          "TAX_AMOUNT": {
+            "expected": 16,
+            "correct": 12,
+            "recall": 0.75,
+            "precision": 0.7059
+          },
+          "TOTAL_AMOUNT": {
+            "expected": 30,
+            "correct": 26,
+            "recall": 0.8667,
+            "precision": 0.9286
+          },
+          "VENDOR_GSTIN": {
+            "expected": 30,
+            "correct": 20,
+            "recall": 0.6667,
+            "precision": 0.6667
+          },
+          "VENDOR_NAME": {
+            "expected": 30,
+            "correct": 21,
+            "recall": 0.7,
+            "precision": 0.75
+          }
+        }
+      },
+      "xlsx": {
+        "documents": 120,
+        "uses_ocr": false,
+        "field_recall": 0.9623,
+        "field_precision": 0.9623,
+        "ocr_intact_rate": 1.0,
+        "recall_vs_ocr_ceiling": 0.9623,
+        "per_label": {
+          "CGST_AMOUNT": {
+            "expected": 47,
+            "correct": 47,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "CUSTOMER_GSTIN": {
+            "expected": 120,
+            "correct": 102,
+            "recall": 0.85,
+            "precision": 0.85
+          },
+          "CUSTOMER_NAME": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "DUE_DATE": {
+            "expected": 90,
+            "correct": 84,
+            "recall": 0.9333,
+            "precision": 0.9333
+          },
+          "IGST_AMOUNT": {
+            "expected": 73,
+            "correct": 73,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "INVOICE_DATE": {
+            "expected": 120,
+            "correct": 113,
+            "recall": 0.9417,
+            "precision": 0.9417
+          },
+          "INVOICE_NUMBER": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "SGST_AMOUNT": {
+            "expected": 47,
+            "correct": 47,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "SUBTOTAL": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "TAX_AMOUNT": {
+            "expected": 82,
+            "correct": 82,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "TOTAL_AMOUNT": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          },
+          "VENDOR_GSTIN": {
+            "expected": 120,
+            "correct": 102,
+            "recall": 0.85,
+            "precision": 0.85
+          },
+          "VENDOR_NAME": {
+            "expected": 120,
+            "correct": 120,
+            "recall": 1.0,
+            "precision": 1.0
+          }
+        }
+      }
+    },
+    "per_label": {
+      "CGST_AMOUNT": {
+        "expected": 188,
+        "correct": 172,
+        "recall": 0.9149,
+        "precision": 0.9198,
+        "recall_vs_ocr_ceiling": 1.0
+      },
+      "CUSTOMER_GSTIN": {
+        "expected": 480,
+        "correct": 340,
+        "recall": 0.7083,
+        "precision": 0.8354,
+        "recall_vs_ocr_ceiling": 0.8213
+      },
+      "CUSTOMER_NAME": {
+        "expected": 480,
+        "correct": 383,
+        "recall": 0.7979,
+        "precision": 0.9141,
+        "recall_vs_ocr_ceiling": 0.9251
+      },
+      "DUE_DATE": {
+        "expected": 360,
+        "correct": 328,
+        "recall": 0.9111,
+        "precision": 0.9266,
+        "recall_vs_ocr_ceiling": 0.9318
+      },
+      "IGST_AMOUNT": {
+        "expected": 292,
+        "correct": 279,
+        "recall": 0.9555,
+        "precision": 0.9654,
+        "recall_vs_ocr_ceiling": 1.0
+      },
+      "INVOICE_DATE": {
+        "expected": 480,
+        "correct": 445,
+        "recall": 0.9271,
+        "precision": 0.9388,
+        "recall_vs_ocr_ceiling": 0.9408
+      },
+      "INVOICE_NUMBER": {
+        "expected": 480,
+        "correct": 473,
+        "recall": 0.9854,
+        "precision": 0.9854,
+        "recall_vs_ocr_ceiling": 1.0
+      },
+      "SGST_AMOUNT": {
+        "expected": 188,
+        "correct": 172,
+        "recall": 0.9149,
+        "precision": 0.9297,
+        "recall_vs_ocr_ceiling": 0.9885
+      },
+      "SUBTOTAL": {
+        "expected": 480,
+        "correct": 447,
+        "recall": 0.9313,
+        "precision": 0.9391,
+        "recall_vs_ocr_ceiling": 0.9911
+      },
+      "TAX_AMOUNT": {
+        "expected": 328,
+        "correct": 305,
+        "recall": 0.9299,
+        "precision": 0.9385,
+        "recall_vs_ocr_ceiling": 0.9903
+      },
+      "TOTAL_AMOUNT": {
+        "expected": 480,
+        "correct": 466,
+        "recall": 0.9708,
+        "precision": 0.9852,
+        "recall_vs_ocr_ceiling": 0.9894
+      },
+      "VENDOR_GSTIN": {
+        "expected": 480,
+        "correct": 406,
+        "recall": 0.8458,
+        "precision": 0.8476,
+        "recall_vs_ocr_ceiling": 0.8712
+      },
+      "VENDOR_NAME": {
+        "expected": 480,
+        "correct": 384,
+        "recall": 0.8,
+        "precision": 0.8223,
+        "recall_vs_ocr_ceiling": 0.9121
+      }
+    },
+    "field_recall": 0.8853,
+    "recall_vs_ocr_ceiling": 0.9449
+  }
+}

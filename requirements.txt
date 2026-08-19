@@ -21,3 +21,15 @@ ultralytics==8.3.61
 openpyxl==3.1.5
 reportlab==4.2.5
 python-docx==1.1.2
+# Imported by app/modules/invoices/parsers (text_extraction, invoice_field_parser)
+# but previously undeclared - the invoice pipeline fails at import without them.
+pdfplumber==0.11.10
+python-dateutil==2.9.0.post0
+# OCR field-extraction model (app/ml/ocr): training and inference.
+scikit-learn==1.9.0
+joblib==1.5.3
+# PostgreSQL driver. The compose deployment points DATABASE_URL at
+# postgresql+psycopg2://, which fails at startup without this — and fails in
+# a way that looks like a database outage rather than a missing package.
+# SQLite deployments never import it.
+psycopg2-binary==2.9.10
