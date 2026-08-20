@@ -193,9 +193,19 @@ def _try_structured(stored_file: Path, tracker: ProcessingTracker):
         tracker.substep(completed, total)
 
     try:
-        return structured_extraction_service.extract(
+        structured = structured_extraction_service.extract(
             stored_file, on_page=on_page, on_stage=on_stage
         )
+        parsed = structured.parsed
+        has_supplier = bool(parsed.vendor.name or parsed.vendor.gstin)
+        if not parsed.invoice_number or parsed.total_amount is None or not has_supplier:
+            logger.warning(
+                "pipeline.structured_extraction_incomplete file=%s confidence=%.3f; "
+                "falling back to text parsing",
+                stored_file.name, structured.confidence.document_confidence,
+            )
+            return None
+        return structured
     except OcrEngineUnavailable:
         raise  # operational: worth failing loudly rather than degrading silently
     except (OcrError, Exception) as exc:

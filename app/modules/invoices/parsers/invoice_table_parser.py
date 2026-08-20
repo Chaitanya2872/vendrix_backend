@@ -47,6 +47,10 @@ def map_headers(header_row: list[str | None]) -> dict[int, str]:
         normalized = normalize_header(raw_cell or "")
         if not normalized:
             continue
+        if "rate" in normalized and "incl" in normalized and "tax" in normalized:
+            # Prefer the exclusive-tax Rate column when both are present;
+            # quantity times that rate is the taxable line amount.
+            continue
         for canonical, aliases in HEADER_ALIASES.items():
             if canonical in column_mapping.values():
                 continue
@@ -87,8 +91,7 @@ def score_table_as_line_items(rows: list[list[str | None]]) -> int:
     how many recognizable invoice-line headers its header row contains."""
     if not rows:
         return 0
-    header_candidates = rows[0]
-    mapping = map_headers(header_candidates)
+    mapping = max((map_headers(row) for row in rows), key=len, default={})
     score = len(mapping)
     if "description" in mapping.values():
         score += 3
@@ -157,9 +160,12 @@ def parse_line_item_tables(tables_per_page: list[list[list[list[str | None]]]]) 
 
         rows = table
         start_index = 0
-        if column_mapping is None or is_header_row(rows[0]):
-            column_mapping = map_headers(rows[0])
-            start_index = 1
+        header_index = next((index for index, row in enumerate(rows) if is_header_row(row)), None)
+        if column_mapping is None or header_index is not None:
+            if header_index is None:
+                continue
+            column_mapping = map_headers(rows[header_index])
+            start_index = header_index + 1
             if not column_mapping:
                 warnings.append(f"Could not map line-item table headers on page {page_index + 1}.")
                 continue
@@ -171,10 +177,22 @@ def parse_line_item_tables(tables_per_page: list[list[list[list[str | None]]]]) 
             if is_header_row(row):
                 # repeated header on a later page/table — skip, keep same mapping
                 continue
-            if is_summary_row(row):
+            first_line_row = [str(cell).splitlines()[0].strip() if cell else "" for cell in row]
+            if is_summary_row(first_line_row):
                 continue
-
             field_values = _cells_to_field_dict(row, column_mapping)
+            # Tally may merge tax summary lines into the last item row. The
+            # first visual line is the item cell; the remaining lines belong
+            # to CGST/SGST/round-off rows below it.
+            field_values = {name: value.splitlines()[0].strip()
+                            for name, value in field_values.items()}
+            if is_summary_row(list(field_values.values())) or \
+                    field_values.get("description", "").strip().lower() == "total":
+                continue
+            if not field_values.get("description") and not any(
+                field_values.get(name) for name in ("hsn_sac", "quantity", "unit_price")
+            ):
+                continue
             if not field_values.get("description") and not _row_has_numeric_signal(field_values):
                 continue
 
@@ -199,3 +217,160 @@ def parse_line_item_tables(tables_per_page: list[list[list[list[str | None]]]]) 
         warnings.append("No invoice line-item table detected; only header-level totals may be available.")
 
     return line_items, warnings
+
+
+_OCR_ITEM_DETAIL = re.compile(
+    r"^(?P<hsn>\d{4,8})\s+(?P<quantity>[\d,.]+)\s+(?P<unit>[A-Za-z]+)\s+"
+    r"(?P<inclusive_rate>[\d,.]+)\s+(?P<unit_price>[\d,.]+)\s+[A-Za-z]+$"
+)
+_OCR_INLINE_ITEM_DETAIL = re.compile(
+    r"^(?P<hsn>\d{4,8})\s+(?P<quantity>[\d,.]+)\s+(?P<unit>[A-Za-z]+)\s+"
+    r"(?P<unit_price>[\d,.]+)\s+[A-Za-z]+(?:\s+(?P<discount>[\d,.]+)\s*%)?\s+"
+    r"(?P<amount>[\d,.]+)$"
+)
+_OCR_SIMPLE_ITEM_DETAIL = re.compile(
+    r"^(?P<hsn>\d{4,8})\s+(?P<quantity>[\d,.]+)\s+(?P<unit>[A-Za-z]+)\s+"
+    r"(?P<unit_price>[\d,.]+)\s+[A-Za-z]+$"
+)
+_OCR_ITEM_DESCRIPTION = re.compile(r"^\s*\d+\s+(.+\S)\s*$")
+
+
+def parse_line_items_from_ocr_text(text: str) -> list[ParsedLineItem]:
+    """Recover rows when OCR flattens a ruled table into visual line order.
+
+    Tally commonly emits amount, numeric columns, then serial/description on
+    three adjacent lines. The arithmetic check is mandatory, so unrelated
+    numbers in the header cannot become a fabricated line item.
+    """
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    try:
+        header = next(index for index, line in enumerate(lines)
+                      if re.search(r"descr.?ption of goods", line.lower()))
+    except StopIteration:
+        return []
+
+    items: list[ParsedLineItem] = []
+    for index in range(header + 1, len(lines)):
+        if lines[index].lower() in {"cgst", "sgst", "igst", "total", "round off"}:
+            if items:
+                break
+        detail = _OCR_INLINE_ITEM_DETAIL.fullmatch(lines[index])
+        legacy_detail = _OCR_ITEM_DETAIL.fullmatch(lines[index]) if detail is None else None
+        simple_detail = _OCR_SIMPLE_ITEM_DETAIL.fullmatch(lines[index]) if detail is None and legacy_detail is None else None
+        matched = detail or legacy_detail or simple_detail
+        if matched is None:
+            continue
+
+        quantity_text = matched.group("quantity")
+        quantity = (Decimal(quantity_text.replace(",", "."))
+                    if re.fullmatch(r"\d+,\d{2}", quantity_text)
+                    else parse_amount(quantity_text))
+        unit_price = parse_amount(matched.group("unit_price"))
+        amount = parse_amount(detail.group("amount")) if detail else None
+        if quantity is None or unit_price is None:
+            continue
+        discount = parse_amount(detail.group("discount")) if detail and detail.group("discount") else Decimal("0")
+        expected = quantity * unit_price * (Decimal("1") - discount / Decimal("100"))
+        if amount is None:
+            nearby = lines[max(header + 1, index - 1):index] + lines[index + 1:index + 4]
+            candidates = [parsed for value in nearby if (parsed := parse_amount(value)) is not None]
+            amount = next((candidate for candidate in candidates
+                           if abs(expected - candidate) <= Decimal("1.00")), None)
+        if amount is None:
+            continue
+        if abs(expected - amount) > Decimal("1.00"):
+            continue
+
+        description = None
+        raw_row = [lines[index - 1], lines[index]]
+        for candidate in lines[max(header + 1, index - 3):index] + lines[index + 1:index + 4]:
+            match = _OCR_ITEM_DESCRIPTION.fullmatch(candidate)
+            if match:
+                description = match.group(1).strip()
+                raw_row.append(candidate)
+                break
+        if not description:
+            continue
+
+        items.append(ParsedLineItem(
+            description=description,
+            hsn_sac=matched.group("hsn"),
+            quantity=quantity,
+            unit=matched.group("unit"),
+            unit_price=unit_price,
+            discount=discount or None,
+            taxable_value=amount,
+            total_amount=amount,
+            raw_row=raw_row,
+        ))
+    return items or _parse_column_stream_items(lines, header)
+
+
+def _parse_column_stream_items(lines: list[str], header: int) -> list[ParsedLineItem]:
+    """Recover OCR tables emitted as independent vertical column streams."""
+    anchors: list[tuple[int, str]] = []
+    expected_serial = 1
+    for index in range(header + 1, len(lines)):
+        match = re.match(r"^\s*(\d+)\s+([A-Za-z].+)$", lines[index])
+        if (match and int(match.group(1)) == expected_serial
+                and match.group(2).strip().lower() not in {"nos", "no", "pcs", "pc"}):
+            anchors.append((index, match.group(2).strip()))
+            expected_serial += 1
+        if anchors and lines[index].lower() == "total":
+            break
+    if not anchors:
+        return []
+
+    items: list[ParsedLineItem] = []
+    for index, description in anchors:
+        window = range(max(header + 1, index - 5), min(len(lines), index + 6))
+
+        hsn_candidates = []
+        quantity_candidates = []
+        money_candidates = []
+        for candidate_index in window:
+            line = lines[candidate_index]
+            hsn = re.fullmatch(r"\d{6,8}", line)
+            if hsn:
+                hsn_candidates.append((abs(candidate_index - index), line))
+            # In this column-stream form quantities are integral (`15 NOS`);
+            # decimal values followed by NOS are the rate-per column.
+            quantity_match = re.search(r"(?<![\d.,])(\d+)\s+NOS\b", line, re.IGNORECASE)
+            if quantity_match:
+                raw_quantity = quantity_match.group(1)
+                quantity = (Decimal(raw_quantity.replace(",", "."))
+                            if re.fullmatch(r"\d+,\d{2}", raw_quantity)
+                            else parse_amount(raw_quantity))
+                if quantity is not None:
+                    quantity_candidates.append((abs(candidate_index - index), quantity))
+            for raw_money in re.findall(r"\d[\d,]*\.\d{2}", line):
+                value = parse_amount(raw_money)
+                if value is not None:
+                    money_candidates.append((abs(candidate_index - index), candidate_index, value))
+
+        if not quantity_candidates or len(money_candidates) < 2:
+            continue
+        quantity = min(quantity_candidates, key=lambda candidate: candidate[0])[1]
+
+        reconciled = []
+        for rate_distance, rate_index, rate in money_candidates:
+            for amount_distance, amount_index, amount in money_candidates:
+                if rate_index == amount_index:
+                    continue
+                if abs(quantity * rate - amount) <= Decimal("1.00"):
+                    reconciled.append((rate_distance + amount_distance, rate, amount))
+        if not reconciled:
+            continue
+        _, unit_price, amount = min(reconciled, key=lambda candidate: candidate[0])
+        hsn_sac = min(hsn_candidates, default=(0, None), key=lambda candidate: candidate[0])[1]
+        items.append(ParsedLineItem(
+            description=description,
+            hsn_sac=hsn_sac,
+            quantity=quantity,
+            unit="NOS",
+            unit_price=unit_price,
+            taxable_value=amount,
+            total_amount=amount,
+            raw_row=[lines[candidate] for candidate in window],
+        ))
+    return items

@@ -75,7 +75,10 @@ def create_from_parsed_document(
     """
     try:
         invoice = Invoice(
-            vendor_id=None,  # vendor master-data matching is out of scope for parsing; left for manual review
+            # Upload already records the selected vendor. Preserve that
+            # ownership when creating the invoice; the column is required
+            # and discarding it here made an otherwise successful parse fail.
+            vendor_id=document.vendor_id,
             invoice_number=parsed.invoice_number,
             invoice_date=parsed.invoice_date,
             due_date=parsed.due_date,

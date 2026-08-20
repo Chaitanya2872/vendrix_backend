@@ -188,6 +188,26 @@ class TestFailurePaths:
         db.refresh(document)
         assert document.extracted_fields["invoice_number"]
 
+    def test_an_incomplete_structured_result_falls_back(self, stored_document, db, monkeypatch):
+        """A successful OCR call is not necessarily a usable extraction."""
+        import app.modules.invoices.services.invoice_pipeline as pipeline
+        from decimal import Decimal
+        from types import SimpleNamespace
+        from app.modules.invoices.dto import ParsedInvoiceResult
+
+        incomplete = SimpleNamespace(
+            parsed=ParsedInvoiceResult(total_amount=Decimal("128136")),
+            confidence=SimpleNamespace(document_confidence=0.31),
+        )
+        monkeypatch.setattr(pipeline.structured_extraction_service, "extract", lambda *a, **k: incomplete)
+        document = stored_document("text_pdf")
+
+        result = process(db, document)
+
+        assert result["success"] is True
+        db.refresh(document)
+        assert document.extracted_fields["invoice_number"]
+
     def test_an_unavailable_ocr_engine_is_distinguished_from_a_bad_document(self, stored_document, db, monkeypatch):
         # Operational versus per-document: an operator reading a list of
         # failures needs to tell "this scan is bad" from "OCR is down". This

@@ -112,6 +112,25 @@ class Invoice(IdMixin, Base):
     )
 
 
+class InvoiceLineItem(IdMixin, Base):
+    __tablename__ = "invoice_line_items"
+
+    invoice_id: Mapped[str] = mapped_column(
+        ForeignKey("invoices.id", ondelete="CASCADE"), index=True
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hsn_sac: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    quantity: Mapped[float | None] = mapped_column(Numeric(14, 3), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    unit_price: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    discount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    gst_rate: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    taxable_value: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    total_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+
+    invoice: Mapped[Invoice] = relationship(back_populates="line_items")
+
+
 class Purchase(IdMixin, Base):
     __tablename__ = "purchases"
     purchase_number: Mapped[str] = mapped_column(String(80), unique=True, index=True)

@@ -97,6 +97,16 @@ class MlAssistedInvoiceParser(BaseInvoiceParser):
         # now has and skips checks that have become possible.
         result.validation_errors.clear()
         self._deterministic._derive_tax_amount_if_missing(result)
+        reconciled = self._deterministic._reconcile_shifted_gst_summary(result)
+        if reconciled:
+            result.warnings = [warning for warning in result.warnings if not warning.startswith(
+                "CGST + SGST + IGST does not closely match"
+            )]
+            reconciled_targets = {
+                "subtotal", "taxable_amount", "cgst_amount", "sgst_amount",
+                "tax_amount", "round_off", "total_amount",
+            }
+            filled = [entry for entry in filled if entry.split(" ", 1)[0] not in reconciled_targets]
         self._deterministic._validate(result)
         result.parsing_confidence = self._deterministic._score_confidence(result)
 
@@ -104,10 +114,11 @@ class MlAssistedInvoiceParser(BaseInvoiceParser):
         result.parser_version = self.version
         # Provenance matters on a review screen: a value the model inferred
         # from a blurred scan deserves a closer look than one read verbatim.
-        result.add_warning(
-            "Some fields were recovered by the OCR field model rather than "
-            f"read directly: {', '.join(filled)}."
-        )
+        if filled:
+            result.add_warning(
+                "Some fields were recovered by the OCR field model rather than "
+                f"read directly: {', '.join(filled)}."
+            )
         logger.info(
             "invoice_parsing.ml_fields_filled count=%d fields=%s confidence=%.2f",
             len(filled), filled, result.parsing_confidence,

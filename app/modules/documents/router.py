@@ -14,6 +14,7 @@ scoped to:
      same as the existing `process_vendor_document` flow already implies
      for other document-derived data.
 """
+import logging
 from datetime import date, datetime, timezone
 from pathlib import Path
 import shutil
@@ -29,10 +30,23 @@ from app.common.dependencies import current_user
 from app.core.config import settings
 from app.db.session import get_db
 from app.models import AuditLog, Document, User, Vendor
+from app.modules.documents.dispatch import claim_for_processing, dispatch_extraction
 from app.modules.documents.schemas import DocumentListItem
-from app.modules.invoices.services.invoice_parser_service import should_parse_as_invoice
+from app.modules.documents.stages import (
+    STATUS_COMPLETED,
+    STATUS_FAILED,
+    STATUS_REVIEW_REQUIRED,
+    STATUS_UPLOADED,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+# States a document may be re-extracted from. PROCESSING is excluded on
+# purpose: something is already doing the work, or is believed to be, and the
+# startup sweep is what handles the case where that belief is wrong.
+REPROCESSABLE_STATUSES = (STATUS_UPLOADED, STATUS_REVIEW_REQUIRED, STATUS_COMPLETED, STATUS_FAILED, "CONFIRMED")
 class DocumentReview(BaseModel): fields: dict[str, Any]
 
 @router.get("", response_model=list[DocumentListItem])
@@ -67,26 +81,38 @@ def upload(
     # alongside the invoice parser would have them overwrite each other —
     # the invoice fields the review UI needs would be replaced by a raw
     # text dump, depending on which finished last.
-    from app.workers.document_tasks import (
-        process_invoice_document, process_invoice_document_now,
-        process_vendor_document, process_vendor_document_now,
-    )
-    if should_parse_as_invoice(document):
-        queued_task, inline_task = process_invoice_document, process_invoice_document_now
-    else:
-        queued_task, inline_task = process_vendor_document, process_vendor_document_now
-
-    if settings.celery_enabled:
-        try:
-            queued_task.delay(document.id)
-        except Exception:
-            # Keep the request fast if the queue is temporarily unavailable.
-            background_tasks.add_task(inline_task, document.id)
-    else:
-        # Local development: send the response first, then process in-process.
-        background_tasks.add_task(inline_task, document.id)
+    route = dispatch_extraction(document, background_tasks)
+    logger.info("documents.uploaded document_id=%s type=%s route=%s", document.id, document.document_type, route)
 
     return document
+
+
+@router.post("/{document_id}/reprocess", status_code=202)
+def reprocess(document_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Run extraction again for a document that has none, or the wrong ones.
+
+    The retry a user reaches for when a document has sat unread — which
+    without this endpoint meant re-uploading the file and leaving the original
+    behind as a duplicate.
+
+    Claiming the document first is what makes the button safe to press twice:
+    the second press finds it already PROCESSING and is refused, rather than
+    starting a second extraction that races the first to write the results.
+    """
+    document = db.get(Document, document_id)
+    if not document:
+        raise HTTPException(404, "Document not found")
+    if not (Path(settings.storage_path) / document.object_key).exists():
+        raise HTTPException(410, "The stored file for this document is no longer available.")
+    if not claim_for_processing(db, document_id, REPROCESSABLE_STATUSES):
+        raise HTTPException(409, "This document is already being processed.")
+
+    db.refresh(document)
+    route = dispatch_extraction(document, background_tasks)
+    db.add(AuditLog(actor_id=user.id, action="REPROCESS", resource_type="documents", resource_id=document.id))
+    db.commit()
+    logger.info("documents.reprocess_requested document_id=%s route=%s", document_id, route)
+    return {"document_id": document_id, "status": "PROCESSING"}
 
 @router.get("/{document_id}")
 def get_document(document_id: str, db: Session = Depends(get_db), _: User = Depends(current_user)):

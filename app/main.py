@@ -154,6 +154,18 @@ def _warm_up_extraction() -> None:
     except Exception:
         logging.getLogger(__name__).warning("ocr_model.warm_up_failed", exc_info=True)
 
+    # Only after the models are loaded: recovery runs real extractions, and
+    # starting them before warm-up finishes would have each one waiting on it
+    # anyway. Documents stranded by a queue with no worker are picked up here
+    # rather than needing every one of them re-uploaded by hand.
+    if settings.documents_recover_stuck_on_startup:
+        try:
+            from app.modules.documents.dispatch import recover_stuck_documents
+
+            recover_stuck_documents()
+        except Exception:
+            logging.getLogger(__name__).warning("documents.recovery_failed", exc_info=True)
+
 
 @app.get("/health", tags=["system"])
 def health() -> dict[str, str]:

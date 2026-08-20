@@ -18,6 +18,18 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
     celery_enabled: bool = False
+    # --- stuck-document recovery -------------------------------------------
+    # A queued task is not a performed one. If Celery is enabled but nothing
+    # is consuming the queue, uploads sit at UPLOADED indefinitely and the UI
+    # waits on an extraction nobody is running. These bound the sweep that
+    # picks those up — see modules/documents/dispatch.py.
+    documents_recover_stuck_on_startup: bool = True
+    # How old a document must be before "still processing" means "abandoned"
+    # rather than "in flight". Comfortably longer than the slowest document.
+    documents_stuck_after_minutes: int = 5
+    # Ceiling on one sweep. A queue broken for a week must not turn the next
+    # restart into an hour of OCR before the service becomes usable.
+    documents_recovery_limit: int = 25
     plate_detector_model_path: str | None = None
     # Trained OCR field-extraction model (app/ml/ocr). Left unset, the packaged
     # artifact is used if present and the parser falls back to deterministic

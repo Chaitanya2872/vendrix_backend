@@ -98,7 +98,11 @@ def attribute_gstins(text: str) -> tuple[str | None, str | None, list[str]]:
                 "used the first GSTIN found on the document as a best guess."
             )
             if len(unclassified) > 1:
-                warnings.append("Additional unlabeled GSTIN candidates found; customer GSTIN left unset.")
+                customer_gstin = unclassified[1]
+                warnings.append(
+                    "GSTIN roles could not be determined from context labels; "
+                    "used their conventional supplier-then-customer order."
+                )
         elif vendor_gstin is not None and customer_gstin is None:
             customer_gstin = unclassified[0]
             if len(unclassified) > 1:

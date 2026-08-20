@@ -6,7 +6,7 @@ from ..dto import ParsedInvoiceResult, ParsedParty
 from .base_invoice_parser import BaseInvoiceParser
 from .text_extraction import ExtractedDocument
 from . import invoice_field_parser as fields
-from .invoice_table_parser import parse_line_item_tables
+from .invoice_table_parser import parse_line_item_tables, parse_line_items_from_ocr_text
 from .money_utils import approx_equal
 
 _TOLERANCE = Decimal("2.00")  # rounding tolerance for arithmetic validation
@@ -46,6 +46,10 @@ class GenericInvoiceParser(BaseInvoiceParser):
         for key, value in gst_breakdown.items():
             setattr(result, key, value)
 
+        summary = fields.extract_tally_summary(text)
+        for key, value in summary.items():
+            setattr(result, key, value)
+
         vendor_dict, customer_dict, gstin_warnings = fields.extract_parties(text)
         result.vendor = ParsedParty(**vendor_dict)
         result.customer = ParsedParty(**customer_dict)
@@ -53,6 +57,10 @@ class GenericInvoiceParser(BaseInvoiceParser):
             result.add_warning(warning)
 
         line_items, table_warnings = parse_line_item_tables(extracted.tables_per_page)
+        if not line_items and extracted.used_ocr:
+            line_items = parse_line_items_from_ocr_text(text)
+            if line_items:
+                table_warnings = []
         result.line_items = line_items
         for warning in table_warnings:
             result.add_warning(warning)
@@ -68,6 +76,34 @@ class GenericInvoiceParser(BaseInvoiceParser):
             components = [v for v in (result.cgst_amount, result.sgst_amount, result.igst_amount) if v is not None]
             if components:
                 result.tax_amount = sum(components)
+
+    @staticmethod
+    def _reconcile_shifted_gst_summary(result: ParsedInvoiceResult) -> bool:
+        """Repair the characteristic one-row shift from a ruled GST summary.
+
+        Plain OCR can emit the labels first and the right-aligned values as a
+        separate run. The ML fallback then maps tax total to subtotal,
+        round-off to SGST, and the line amount to tax/grand total. Rewriting
+        is safe only when every part of that distinctive arithmetic agrees.
+        """
+        cgst, tiny, tax_total = result.cgst_amount, result.sgst_amount, result.subtotal
+        line_amount, alleged_total = result.tax_amount, result.total_amount
+        if None in (cgst, tiny, tax_total, line_amount, alleged_total):
+            return False
+        if cgst <= 1 or abs(tiny) >= 1 or line_amount <= tax_total:
+            return False
+        if not approx_equal(tax_total, cgst * 2, Decimal("0.02")):
+            return False
+        if not approx_equal(line_amount, alleged_total, Decimal("0.02")):
+            return False
+
+        result.subtotal = line_amount
+        result.taxable_amount = line_amount
+        result.sgst_amount = cgst
+        result.tax_amount = tax_total
+        result.round_off = -abs(tiny)
+        result.total_amount = line_amount + tax_total + result.round_off
+        return True
 
     @staticmethod
     def _validate(result: ParsedInvoiceResult) -> None:
@@ -104,6 +140,8 @@ class GenericInvoiceParser(BaseInvoiceParser):
         for item in result.line_items:
             if item.quantity is not None and item.unit_price is not None:
                 expected = item.quantity * item.unit_price
+                if item.discount is not None:
+                    expected *= Decimal("1") - item.discount / Decimal("100")
                 reference = item.taxable_value if item.taxable_value is not None else item.total_amount
                 if reference is not None and not approx_equal(expected, reference, _TOLERANCE):
                     result.add_warning(
