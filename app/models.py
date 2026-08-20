@@ -166,6 +166,15 @@ class Document(IdMixin, Base):
     document_type: Mapped[str] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(30), default="UPLOADED")
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    # Which vendor this document belongs to. Nullable because the upload form
+    # has always allowed a document with no vendor chosen, and documents
+    # predating this column have none — the Documents list surfaces those as
+    # "Unassigned" rather than hiding them.
+    vendor_id: Mapped[str | None] = mapped_column(ForeignKey("vendors.id"), nullable=True, index=True)
+    # Compliance expiry the uploader entered. Kept on the document rather than
+    # derived from extracted_fields: a certificate's expiry is a fact about
+    # the file, and the expiry filters must work for types nothing parses.
+    expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     extracted_fields: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     review_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Human-facing identifier (DOC-2026-000001). Nullable because documents

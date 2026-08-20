@@ -57,20 +57,40 @@ holds about 60% of the bar because it holds about 60% of the time; equal
 slices would show a bar that leaps to 60% and then sits still for the whole
 actual wait.
 
+## Which OCR engine runs
+
+Two backends, selected by `OCR_BACKEND`, running the same PP-OCR networks:
+
+- **`onnx`** (default) — ONNX Runtime, via `rapidocr`. About seven times
+  faster per page on CPU than paddle, and about twenty times cheaper to
+  construct. Its models ship inside the wheel.
+- **`paddle`** — PaddleOCR. The fallback, selected automatically if
+  `rapidocr` is not importable. Still what the ANPR path uses.
+
+`app/modules/ocr/engine.py` is the only module that imports either, and both
+normalise to the same `RawDetection`, so nothing downstream knows which ran.
+Check `ocr.engine_ready backend=…` in the logs to see which one did.
+See [ocr-performance.md](ocr-performance.md) for the measurements behind the
+default.
+
 ## Air-gapped deployment
 
-The OCR model weights are downloaded **at image build time** and baked in:
+Neither backend may reach the network at run time.
+
+The ONNX models are packaged inside the `rapidocr` wheel, so `pip install`
+during the image build is all they need. The paddle weights are downloaded
+**at image build time** and baked in:
 
 ```dockerfile
 RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(lang='en', ...)"
 ```
 
 Without this the image passes CI (which has a network) and fails on the
-customer's machine at the first upload. The build also asserts the weights
-are present, so a broken build fails loudly rather than shipping.
+customer's machine at the first upload. The build asserts that both sets of
+weights are present, so a broken build fails loudly rather than shipping.
 
-Two environment variables carry the whole air-gapped claim, and both have
-names that cannot be guessed:
+Two environment variables carry the paddle half of the air-gapped claim, and
+both have names that cannot be guessed:
 
 - **`PADDLE_PDX_CACHE_HOME`** is where PaddleX caches weights
   (`paddlex/utils/cache.py`). Any other name — `PADDLEX_HOME`, say — is

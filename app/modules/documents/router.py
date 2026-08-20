@@ -14,7 +14,7 @@ scoped to:
      same as the existing `process_vendor_document` flow already implies
      for other document-derived data.
 """
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 import shutil
 from io import BytesIO
@@ -28,7 +28,7 @@ from sqlalchemy import select
 from app.common.dependencies import current_user
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import AuditLog, Document, User
+from app.models import AuditLog, Document, User, Vendor
 from app.modules.documents.schemas import DocumentListItem
 from app.modules.invoices.services.invoice_parser_service import should_parse_as_invoice
 
@@ -40,14 +40,27 @@ def list_documents(db: Session = Depends(get_db), _: User = Depends(current_user
     return db.scalars(select(Document).order_by(Document.created_at.desc())).all()
 
 @router.post("", status_code=201)
-def upload(document_type: str, background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(current_user)):
+def upload(
+    document_type: str,
+    background_tasks: BackgroundTasks,
+    vendor_id: str | None = None,
+    expires_on: date | None = None,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
     extension = Path(file.filename or "").suffix.lower()
     supported_extensions = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".docx", ".xlsx"}
     if extension not in supported_extensions:
         raise HTTPException(415, "Supported files: PDF, JPG, PNG, WEBP, DOCX, XLSX")
+    # An unknown vendor is rejected rather than silently stored: a document
+    # filed against a vendor that does not exist is invisible to every vendor
+    # filter, which reads to the user as a lost upload.
+    if vendor_id and not db.get(Vendor, vendor_id):
+        raise HTTPException(404, "Vendor not found")
     key = f"{user.id}/{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid4().hex[:8]}_{file.filename}"; path = Path(settings.storage_path) / key; path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as output: shutil.copyfileobj(file.file, output)
-    document = Document(filename=file.filename, object_key=key, content_type=file.content_type, document_type=document_type.upper(), owner_id=user.id)
+    document = Document(filename=file.filename, object_key=key, content_type=file.content_type, document_type=document_type.upper(), owner_id=user.id, vendor_id=vendor_id or None, expires_on=expires_on, size_bytes=path.stat().st_size)
     db.add(document); db.flush(); db.add(AuditLog(actor_id=user.id, action="UPLOAD", resource_type="documents", resource_id=document.id)); db.commit(); db.refresh(document)
     # Exactly one extraction task runs per upload. Both write to
     # Document.extracted_fields, so running the generic vendor extractor

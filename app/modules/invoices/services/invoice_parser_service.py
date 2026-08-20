@@ -16,6 +16,7 @@ already used in documents/router.py and invoices/router.py.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -145,6 +146,7 @@ def process_document(db: Session, document: Document) -> dict:
     takes down the upload flow.
     """
     stored_file = Path(settings.storage_path) / document.object_key
+    started_at = time.monotonic()
     logger.info("invoice_parsing.started document_id=%s", document.id)
 
     if not stored_file.exists():
@@ -153,6 +155,7 @@ def process_document(db: Session, document: Document) -> dict:
 
     _set_stage(db, document, "reading")
 
+    extraction_started_at = time.monotonic()
     try:
         extracted = extract_document(
             str(stored_file),
@@ -161,6 +164,7 @@ def process_document(db: Session, document: Document) -> dict:
     except UnsupportedDocumentError as exc:
         logger.warning("invoice_parsing.failed document_id=%s reason=%s", document.id, exc)
         return _record_failure(db, document, str(exc))
+    extraction_seconds = time.monotonic() - extraction_started_at
 
     if not extracted.text.strip() and not any(extracted.tables_per_page):
         logger.warning("invoice_parsing.failed document_id=%s reason=no_readable_text", document.id)
@@ -173,11 +177,20 @@ def process_document(db: Session, document: Document) -> dict:
     parser = select_parser(extracted.text)
     logger.info("invoice_parsing.parser_selected document_id=%s parser=%s", document.id, parser.name)
 
+    parse_started_at = time.monotonic()
     parsed: ParsedInvoiceResult = parser.parse(extracted)
+    parse_seconds = time.monotonic() - parse_started_at
     _set_stage(db, document, "saving", used_ocr=extracted.used_ocr)
+    # Text extraction and field parsing are logged separately because they
+    # have nothing in common: extraction is dominated by OCR when OCR runs at
+    # all, parsing is regex over a string. A single total tells you a
+    # document was slow; these two tell you which half to look at.
     logger.info(
-        "invoice_parsing.completed document_id=%s confidence=%.2f warnings=%d errors=%d",
+        "invoice_parsing.completed document_id=%s confidence=%.2f warnings=%d errors=%d "
+        "ocr=%s pages=%s extraction_seconds=%.2f parse_seconds=%.2f total_seconds=%.2f",
         document.id, parsed.parsing_confidence, len(parsed.warnings), len(parsed.validation_errors),
+        extracted.used_ocr, extracted.page_count, extraction_seconds, parse_seconds,
+        time.monotonic() - started_at,
     )
 
     # Persist the extracted values on the Document before anything else can

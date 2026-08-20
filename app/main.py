@@ -1,4 +1,5 @@
 """FastAPI application composition; domain behavior lives in app.modules."""
+import logging
 import sys
 from pathlib import Path
 
@@ -90,6 +91,10 @@ def initialize() -> None:
             "document_number": "VARCHAR(24)", "sha256": "VARCHAR(64)",
             "size_bytes": "INTEGER", "file_format": "VARCHAR(10)",
             "page_count": "INTEGER",
+            # Vendor ownership and compliance expiry, added when the Documents
+            # page gained vendor and expiry filtering. Both nullable: existing
+            # rows have neither and inventing values would be a lie.
+            "vendor_id": "VARCHAR(36)", "expires_on": "DATE",
         }
         indexes = {index["name"] for index in inspector.get_indexes("documents")}
         with engine.begin() as connection:
@@ -105,6 +110,21 @@ def initialize() -> None:
                 connection.execute(text(
                     "CREATE INDEX IF NOT EXISTS ix_documents_sha256 ON documents (sha256)"
                 ))
+            if "ix_documents_vendor_id" not in indexes:
+                connection.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_documents_vendor_id ON documents (vendor_id)"
+                ))
+
+    # Load the extraction models now, off the request path. Both are a fixed
+    # per-process cost — the OCR engine's runtime session, and the field
+    # model's joblib artifact — and paying either inside the first document
+    # upload is what made extraction look slow even for documents that parse
+    # in under a second. A daemon thread, so a slow or missing model never
+    # delays startup or holds the process open at shutdown.
+    if settings.ocr_warm_up_on_startup:
+        import threading
+
+        threading.Thread(target=_warm_up_extraction, name="extraction-warm-up", daemon=True).start()
 
     with Session(engine) as db:
         if not db.scalar(select(User.id).limit(1)):
@@ -114,6 +134,25 @@ def initialize() -> None:
             default_categories = ["Transport & Logistics", "Construction", "Equipment Rental", "Materials Supplier", "Professional Services", "Maintenance", "Office Supplies", "Other"]
             db.add_all(VendorCategory(name=name) for name in default_categories)
             db.commit()
+
+
+def _warm_up_extraction() -> None:
+    """Preload everything the extraction pipeline builds lazily.
+
+    Both loaders are idempotent and internally cached, so this is safe to run
+    concurrently with a request that got there first. Neither is allowed to
+    raise: a deployment with no OCR models or no trained field model still
+    serves every other route, and both paths already degrade gracefully.
+    """
+    from app.modules.ocr import engine as ocr_engine
+
+    ocr_engine.warm_up()
+    try:
+        from app.ml.ocr import predict
+
+        predict.load_model()
+    except Exception:
+        logging.getLogger(__name__).warning("ocr_model.warm_up_failed", exc_info=True)
 
 
 @app.get("/health", tags=["system"])

@@ -140,6 +140,37 @@ def _assemble(
     return text, box, confidence, words
 
 
+def downscale_for_ocr(image: np.ndarray, max_side: int | None = None) -> np.ndarray:
+    """Shrink an oversized page to `settings.ocr_max_image_side`.
+
+    A 300-DPI A4 scan arrives at roughly 2500x3500. The detector resizes it
+    internally to a fraction of that before it looks at anything, so the extra
+    pixels are rendered, copied through this process and then thrown away —
+    and every crop the recogniser is handed is correspondingly larger for no
+    added information. Measured on the sample invoices, capping the longest
+    side at 1600 left the detected line count and the recognised text
+    unchanged.
+
+    Returned unchanged when already within the cap, so callers can apply this
+    unconditionally. Note that this *does* change the pixel space the
+    returned geometry refers to; call it before recognition, not after.
+    """
+    limit = settings.ocr_max_image_side if max_side is None else max_side
+    if limit <= 0 or image is None or not image.size:
+        return image
+    height, width = image.shape[:2]
+    longest = max(height, width)
+    if longest <= limit:
+        return image
+    import cv2
+
+    scale = limit / longest
+    # INTER_AREA is the correct filter for shrinking: it averages the pixels
+    # being merged instead of sampling one of them, which is what keeps thin
+    # invoice glyphs legible rather than aliasing them away.
+    return cv2.resize(image, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_AREA)
+
+
 def recognize_page(
     image: np.ndarray,
     page_number: int = 1,
@@ -151,11 +182,17 @@ def recognize_page(
 
     `image` must already be in the state the caller wants recognised — the
     returned coordinates are in this image's pixel space, so preprocessing
-    that changes geometry (rotation, cropping, rescaling) has to happen
-    before this call, and is recorded on the page for traceability.
+    that changes geometry (rotation, cropping) has to happen before this
+    call, and is recorded on the page for traceability. The one exception is
+    the size cap below, which is applied here so that no caller can forget
+    it; the returned geometry is in the capped image's space.
     """
     threshold = settings.ocr_min_confidence if min_confidence is None else min_confidence
+    original_height = image.shape[0] if image is not None and image.size else 0
+    image = downscale_for_ocr(image)
     height, width = (image.shape[0], image.shape[1]) if image is not None and image.size else (0, 0)
+    if height and height != original_height:
+        preprocessing_applied = [*(preprocessing_applied or []), f"downscaled_to_{max(height, width)}px"]
 
     detections = engine.recognize(image, language=settings.ocr_language)
 

@@ -15,6 +15,14 @@ pymupdf==1.24.14
 pillow==11.0.0
 numpy==2.2.0
 opencv-python-headless==4.10.0.84
+# OCR runtime. `rapidocr` runs the PP-OCR detection and recognition networks
+# under ONNX Runtime and is the default backend (OCR_BACKEND=onnx): same
+# models as paddle, ~7x faster per page on CPU and ~20x cheaper to construct.
+# See docs/ocr-performance.md for the measurements.
+rapidocr==3.9.2
+onnxruntime==1.29.0
+# PaddleOCR is retained as the fallback backend (OCR_BACKEND=paddle) and is
+# still what the ANPR path uses.
 paddleocr==3.7.0
 paddlepaddle==3.3.1
 ultralytics==8.3.61

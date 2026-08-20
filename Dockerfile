@@ -33,9 +33,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir --timeout 180 --retries 10 -r requirements.txt
 
-# Download the OCR model weights at BUILD time, so the first request on an
-# air-gapped box does not try to fetch them and fail. Without this the image
-# looks fine in CI (which has a network) and dies on the customer's machine.
+# Download the *paddle* OCR model weights at BUILD time, so the first request
+# on an air-gapped box does not try to fetch them and fail. Without this the
+# image looks fine in CI (which has a network) and dies on the customer's
+# machine.
+#
+# The default backend is ONNX Runtime, whose models ship inside the rapidocr
+# wheel and are therefore already present after the pip install above. This
+# step is for the paddle fallback backend (OCR_BACKEND=paddle), which is the
+# one that fetches its weights at first use.
 #
 # The connectivity check is re-enabled for this one command: the build *does*
 # have a network, and letting paddlex pick a reachable hoster is more robust
@@ -54,12 +60,25 @@ COPY . .
 RUN python - <<'PYTHON'
 import os
 import sys
+from pathlib import Path
 
-models = os.path.join(os.environ["PADDLE_PDX_CACHE_HOME"], "official_models")
-if not os.path.isdir(models) or not any(os.scandir(models)):
-    sys.exit(f"OCR model weights are missing from {models}; the image would "
-             "need network access at run time.")
-print(f"OCR models cached: {sorted(entry.name for entry in os.scandir(models))}")
+# The default backend. rapidocr ships these inside its wheel, so they are
+# present or the install itself was broken — but check anyway, because the
+# failure mode being guarded against is precisely one that stays invisible
+# until a customer uploads an invoice.
+onnx_models = Path(__import__("rapidocr").__file__).parent / "models"
+onnx_present = sorted(path.name for path in onnx_models.glob("*.onnx"))
+if not onnx_present:
+    sys.exit(f"ONNX OCR models are missing from {onnx_models}; the image "
+             "would need network access at run time.")
+print(f"ONNX OCR models bundled: {onnx_present}")
+
+# The fallback backend, fetched by the build step above.
+paddle_models = os.path.join(os.environ["PADDLE_PDX_CACHE_HOME"], "official_models")
+if not os.path.isdir(paddle_models) or not any(os.scandir(paddle_models)):
+    sys.exit(f"Paddle OCR model weights are missing from {paddle_models}; the "
+             "image would need network access at run time.")
+print(f"Paddle OCR models cached: {sorted(entry.name for entry in os.scandir(paddle_models))}")
 PYTHON
 
 EXPOSE 8000

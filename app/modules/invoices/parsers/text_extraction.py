@@ -7,10 +7,15 @@ would be slow and unnecessary.
 
 Photographed/scanned invoices (JPG, JPEG, PNG, WEBP) have no native text
 layer at all, so they skip straight to OCR. The OCR engine is the same one
-the rest of the project uses (PaddleOCR, via app.workers.vision) rather than
-a second stack: pytesseract is kept only as a fallback for environments where
+the rest of the project uses (PaddleOCR, via app.modules.ocr) rather than a
+second stack: pytesseract is kept only as a fallback for environments where
 paddle isn't importable, since it additionally needs a system tesseract
 binary that isn't part of this project's dependency set.
+
+OCR is by far the most expensive thing this module can do, so the choices
+that bound it live here: native text is preferred whenever there is enough of
+it, only the first `ocr_max_pages` pages of a scan are read, and the OCR
+service caps how many pixels each of those pages is recognised at.
 """
 from __future__ import annotations
 
@@ -84,14 +89,21 @@ def _extract_native(file_path: str) -> ExtractedDocument:
 
 
 def _ocr_image_bytes(raw: bytes) -> str:
-    """OCR a single raster image, preferring the project's PaddleOCR helper
-    (app.workers.vision, already used by the vendor-document worker) and
+    """OCR a single raster image, preferring the project's OCR service and
     falling back to pytesseract where paddle isn't available. Imported lazily
     because loading paddle is expensive and most invoices are text PDFs that
-    never reach this path."""
+    never reach this path.
+
+    This goes to `ocr.service` rather than to `workers.vision.read_text`,
+    which is the same engine behind a fixed denoise-and-CLAHE pass. That pass
+    exists for number-plate crops and costs several seconds on a full page —
+    measurably more than the recognition it precedes on a clean scan, for no
+    gain on one. Pages that genuinely need conditioning get it from
+    `image_preprocessing_service`, which measures the page first.
+    """
     try:
-        from app.workers.vision import decode_image, read_text
-        return read_text(decode_image(raw))
+        from app.modules.ocr import service as ocr_service
+        return ocr_service.recognize_image_bytes(raw).text
     except ImportError:
         pass
     except Exception as exc:
@@ -126,9 +138,28 @@ def _extract_via_ocr(file_path: str) -> ExtractedDocument:
     except Exception as exc:
         raise UnsupportedDocumentError(f"Unable to open PDF for OCR: {exc}") from exc
 
+    from app.core.config import settings
+
     with document:
-        texts = [_ocr_image_bytes(page.get_pixmap(dpi=300).tobytes("png")) for page in document]
         page_count = len(document)
+        # Every OCR'd page costs seconds, and an invoice's number, dates,
+        # parties and totals are on the first page or two. A scanned annexure
+        # bound into the same PDF would multiply the wait without changing a
+        # single parsed field, so the tail is skipped rather than read.
+        limit = settings.ocr_max_pages if settings.ocr_max_pages > 0 else page_count
+        read_pages = min(page_count, limit)
+        if read_pages < page_count:
+            logger.info(
+                "invoice_parsing.ocr_page_limit_applied pages=%s read=%s",
+                page_count, read_pages,
+            )
+        # Rendered at the configured DPI; the OCR service caps the pixel size
+        # from there, so raising the DPI cannot silently reintroduce a
+        # multi-megapixel page.
+        texts = [
+            _ocr_image_bytes(document[index].get_pixmap(dpi=settings.ocr_render_dpi).tobytes("png"))
+            for index in range(read_pages)
+        ]
 
     return ExtractedDocument(
         text="\n".join(texts),

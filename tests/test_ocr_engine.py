@@ -4,12 +4,16 @@ A paddle upgrade that changes the result shape must not turn into silently
 empty extractions — an invoice pipeline that returns "no text found" for
 every document looks like bad scans, not a broken adapter. These tests pin
 both shapes the adapter claims to accept.
+
+These cover the *paddle* normaliser specifically. The ONNX backend is the
+default and has its own result shape and its own tests; paddle remains the
+fallback, and a fallback nobody tests is a fallback that does not work.
 """
 import numpy as np
 import pytest
 
 from app.modules.ocr import engine
-from app.modules.ocr.exceptions import OcrPageFailed
+from app.modules.ocr.exceptions import OcrEngineUnavailable, OcrPageFailed
 
 
 class ResultV3(dict):
@@ -43,7 +47,7 @@ class TestVersion3Shape:
             "rec_scores": [0.99, 0.87],
             "rec_polys": [square(10, 10, 200, 40), square(10, 60, 120, 85)],
         })]
-        detections = engine._normalise_result(result)
+        detections = engine._normalise_paddle(result)
         assert [d.text for d in detections] == ["Tax Invoice", "INV-42"]
         assert [d.confidence for d in detections] == [0.99, 0.87]
         assert detections[0].polygon == [(10.0, 10.0), (200.0, 10.0), (200.0, 40.0), (10.0, 40.0)]
@@ -56,7 +60,7 @@ class TestVersion3Shape:
             "rec_scores": [np.float32(0.87)],
             "rec_polys": [np.array(square(10, 60, 120, 85), dtype=np.float32)],
         })]
-        detection = engine._normalise_result(result)[0]
+        detection = engine._normalise_paddle(result)[0]
         assert detection.polygon == [(10.0, 60.0), (120.0, 60.0), (120.0, 85.0), (10.0, 85.0)]
         assert all(type(value) is float for point in detection.polygon for value in point)
         assert type(detection.confidence) is float
@@ -68,7 +72,7 @@ class TestVersion3Shape:
             "rec_polys": [],
             "dt_polys": [square(10, 60, 120, 85)],
         })]
-        assert len(engine._normalise_result(result)) == 1
+        assert len(engine._normalise_paddle(result)) == 1
 
     def test_a_detection_without_geometry_is_dropped_not_guessed(self):
         # Unusable downstream: a box is how every later stage locates it.
@@ -77,11 +81,11 @@ class TestVersion3Shape:
             "rec_scores": [0.9, 0.9],
             "rec_polys": [square(10, 10, 100, 30)],
         })]
-        assert [d.text for d in engine._normalise_result(result)] == ["has geometry"]
+        assert [d.text for d in engine._normalise_paddle(result)] == ["has geometry"]
 
     def test_missing_scores_default_to_zero_rather_than_faking_certainty(self):
         result = [ResultV3({"rec_texts": ["INV-42"], "rec_polys": [square(0, 0, 10, 10)]})]
-        assert engine._normalise_result(result)[0].confidence == 0.0
+        assert engine._normalise_paddle(result)[0].confidence == 0.0
 
     def test_reads_a_result_reachable_only_through_json(self):
         result = [ResultJsonOnly({
@@ -89,14 +93,14 @@ class TestVersion3Shape:
             "rec_scores": [0.95],
             "rec_polys": [square(10, 10, 200, 40)],
         })]
-        assert [d.text for d in engine._normalise_result(result)] == ["Tax Invoice"]
+        assert [d.text for d in engine._normalise_paddle(result)] == ["Tax Invoice"]
 
     def test_multiple_pages_in_one_result_are_flattened(self):
         result = [
             ResultV3({"rec_texts": ["page one"], "rec_scores": [0.9], "rec_polys": [square(0, 0, 10, 10)]}),
             ResultV3({"rec_texts": ["page two"], "rec_scores": [0.9], "rec_polys": [square(0, 0, 10, 10)]}),
         ]
-        assert [d.text for d in engine._normalise_result(result)] == ["page one", "page two"]
+        assert [d.text for d in engine._normalise_paddle(result)] == ["page one", "page two"]
 
 
 class TestVersion2Shape:
@@ -105,7 +109,7 @@ class TestVersion2Shape:
             [square(10, 10, 200, 40), ("Tax Invoice", 0.99)],
             [square(10, 60, 120, 85), ("INV-42", 0.87)],
         ]]
-        detections = engine._normalise_result(result)
+        detections = engine._normalise_paddle(result)
         assert [d.text for d in detections] == ["Tax Invoice", "INV-42"]
         assert [d.confidence for d in detections] == [0.99, 0.87]
 
@@ -114,16 +118,16 @@ class TestVersion2Shape:
             [square(10, 10, 200, 40), ("good", 0.99)],
             ["not a polygon"],
         ]]
-        assert [d.text for d in engine._normalise_result(result)] == ["good"]
+        assert [d.text for d in engine._normalise_paddle(result)] == ["good"]
 
 
 class TestUnknownShape:
     def test_an_unrecognised_shape_yields_nothing_rather_than_raising(self):
         # Logged loudly, but one odd page must not abort a document.
-        assert engine._normalise_result([object()]) == []
+        assert engine._normalise_paddle([object()]) == []
 
     def test_an_empty_result_is_not_an_error(self):
-        assert engine._normalise_result([]) == []
+        assert engine._normalise_paddle([]) == []
 
 
 class TestGuards:
@@ -144,3 +148,94 @@ class TestOneDnnWorkaround:
         # reason this module is the only one that imports paddle.
         import os
         assert os.environ.get("PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT") == "0"
+
+
+class RapidResult:
+    """Stand-in for a RapidOCROutput: parallel boxes / txts / scores, with
+    boxes as the (N, 4, 2) array the real one returns."""
+
+    def __init__(self, boxes, txts, scores):
+        self.boxes = boxes
+        self.txts = txts
+        self.scores = scores
+
+
+class TestRapidOcrShape:
+    """The ONNX backend's result shape. This is the default backend, so a
+    normaliser that silently returned nothing here would empty every
+    extraction in the product."""
+
+    def test_reads_texts_scores_and_polygons(self):
+        result = RapidResult(
+            boxes=np.array([square(10, 10, 200, 40), square(10, 60, 120, 85)], dtype=float),
+            txts=["Tax Invoice", "INV-42"],
+            scores=[0.99, 0.87],
+        )
+        detections = engine._normalise_rapidocr(result)
+        assert [d.text for d in detections] == ["Tax Invoice", "INV-42"]
+        assert [d.confidence for d in detections] == [0.99, 0.87]
+
+    def test_numpy_polygons_are_converted_to_plain_floats(self):
+        # numpy scalars leak into JSON encoders and equality checks in ways
+        # that only surface at the API boundary.
+        result = RapidResult(
+            boxes=np.array([square(1, 2, 3, 4)], dtype=np.float32),
+            txts=["x"],
+            scores=[0.5],
+        )
+        polygon = engine._normalise_rapidocr(result)[0].polygon
+        assert polygon == [(1.0, 2.0), (3.0, 2.0), (3.0, 4.0), (1.0, 4.0)]
+        assert all(type(value) is float for point in polygon for value in point)
+
+    def test_a_detection_without_geometry_is_dropped_not_guessed(self):
+        result = RapidResult(
+            boxes=np.array([square(10, 10, 200, 40), np.zeros((0, 2))], dtype=object),
+            txts=["has geometry", "no geometry"],
+            scores=[0.9, 0.9],
+        )
+        assert [d.text for d in engine._normalise_rapidocr(result)] == ["has geometry"]
+
+    def test_missing_scores_default_to_zero_rather_than_faking_certainty(self):
+        result = RapidResult(
+            boxes=np.array([square(0, 0, 10, 10)], dtype=float),
+            txts=["unscored"],
+            scores=None,
+        )
+        assert engine._normalise_rapidocr(result)[0].confidence == 0.0
+
+    def test_a_page_with_no_text_is_not_an_error(self):
+        # RapidOCR returns None rather than empty arrays for a blank page.
+        assert engine._normalise_rapidocr(RapidResult(None, None, None)) == []
+
+    def test_more_texts_than_boxes_drops_the_unpaired_text(self):
+        # Defensive: the two are meant to be index-aligned, and a text with
+        # no box cannot be placed on the page by anything downstream.
+        result = RapidResult(
+            boxes=np.array([square(0, 0, 10, 10)], dtype=float),
+            txts=["paired", "orphan"],
+            scores=[0.9, 0.9],
+        )
+        assert [d.text for d in engine._normalise_rapidocr(result)] == ["paired"]
+
+
+class TestBackendSelection:
+    def test_paddle_is_used_when_configured(self, monkeypatch):
+        monkeypatch.setattr("app.core.config.settings.ocr_backend", "paddle")
+        monkeypatch.setattr(engine, "_paddle_engine", lambda language="en": "paddle-engine")
+        assert engine._engine("en") == "paddle-engine"
+
+    def test_onnx_is_the_default(self, monkeypatch):
+        monkeypatch.setattr("app.core.config.settings.ocr_backend", "onnx")
+        monkeypatch.setattr(engine, "_onnx_engine", lambda language="en": "onnx-engine")
+        assert engine._engine("en") == "onnx-engine"
+
+    def test_a_missing_onnx_runtime_falls_back_to_paddle(self, monkeypatch):
+        # A deployment that has not picked up the new dependency should run
+        # slowly, not fail every upload.
+        def unavailable(language="en"):
+            raise OcrEngineUnavailable("rapidocr not installed")
+
+        monkeypatch.setattr("app.core.config.settings.ocr_backend", "onnx")
+        monkeypatch.setattr(engine, "_onnx_engine", unavailable)
+        monkeypatch.setattr(engine, "_paddle_engine", lambda language="en": "paddle-engine")
+        assert engine._engine("en") == "paddle-engine"

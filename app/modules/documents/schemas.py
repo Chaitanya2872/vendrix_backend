@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict
 
 
@@ -11,5 +11,12 @@ class DocumentListItem(BaseModel):
     document_type: str
     status: str
     owner_id: str
+    # Cheap scalars the Documents list filters and sorts on. They are a few
+    # bytes each, so including them costs nothing against the reason
+    # extracted_fields is excluded, and leaving them out would force the page
+    # to fetch every document individually just to draw its filter chips.
+    vendor_id: str | None = None
+    expires_on: date | None = None
+    size_bytes: int | None = None
     review_confirmed_at: datetime | None
     created_at: datetime
