@@ -24,6 +24,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.documents.router import router as documents_router
 from app.modules.deliveries.router import router as deliveries_router
 from app.modules.drivers.router import router as drivers_router
+from app.modules.gate.router import router as gate_router
 from app.modules.invoices.extraction_router import router as invoice_extraction_router
 from app.modules.invoices.router import router as invoices_router
 from app.modules.mobile.router import router as mobile_router
@@ -38,7 +39,7 @@ from app.modules.vendor_categories.router import router as vendor_categories_rou
 app = FastAPI(title=settings.app_name, version="0.1.0", openapi_url="/api/v1/openapi.json")
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins.split(","), allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?", allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-for router in (auth_router, users_router, vendors_router, vendor_categories_router, vehicles_router, drivers_router, invoices_router, invoice_extraction_router, payments_router, approvals_router, documents_router, purchases_router, deliveries_router, anpr_router, reports_router, mobile_router, audit_router):
+for router in (auth_router, users_router, vendors_router, vendor_categories_router, vehicles_router, drivers_router, invoices_router, invoice_extraction_router, payments_router, approvals_router, documents_router, purchases_router, deliveries_router, gate_router, anpr_router, reports_router, mobile_router, audit_router):
     app.include_router(router, prefix="/api/v1")
 
 

@@ -216,3 +216,68 @@ class AuditLog(IdMixin, Base):
     resource_type: Mapped[str] = mapped_column(String(40))
     resource_id: Mapped[str] = mapped_column(String(36))
     details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class VehicleEntry(IdMixin, Base):
+    """One vehicle visit across the gate — the inward/outward gate pass.
+
+    `direction` describes what the visit is *for*, not which way the barrier
+    moved: INWARD is a vehicle bringing material on to the site, OUTWARD is
+    one taking material off it. Both kinds of visit arrive and both leave, so
+    a single record with `entry_at` / `exit_at` covers each of them without
+    the two-rows-per-visit bookkeeping that makes "which vehicles are inside
+    right now" an expensive question. While `exit_at` is null the vehicle is
+    on the premises; that is the whole of the state machine.
+
+    A visit is deliberately not required to reference a registered Vehicle.
+    Gate security cannot refuse a truck because nobody onboarded it, so
+    `registration_number` is always captured as text and `vehicle_id` is
+    filled in when the plate matches the fleet registry.
+    """
+
+    __tablename__ = "vehicle_entries"
+
+    entry_number: Mapped[str] = mapped_column(String(24), unique=True, index=True)
+    direction: Mapped[str] = mapped_column(String(10), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="IN_PREMISES", index=True)
+    purpose: Mapped[str] = mapped_column(String(30), default="DELIVERY")
+
+    # Normalised plate text, always present. Indexed because the open-visit
+    # check runs on it for every single gate-in.
+    registration_number: Mapped[str] = mapped_column(String(15), index=True)
+    vehicle_id: Mapped[str | None] = mapped_column(ForeignKey("vehicles.id"), nullable=True, index=True)
+    vendor_id: Mapped[str | None] = mapped_column(ForeignKey("vendors.id"), nullable=True, index=True)
+    driver_id: Mapped[str | None] = mapped_column(ForeignKey("drivers.id"), nullable=True)
+    # Kept alongside driver_id: a substitute driver with no record in the
+    # system is the common case at a gate, and the name on the pass is what
+    # an incident investigation needs months later even if the Driver row
+    # has since been reassigned or deleted.
+    driver_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    driver_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+    purchase_id: Mapped[str | None] = mapped_column(ForeignKey("purchases.id"), nullable=True, index=True)
+    delivery_id: Mapped[str | None] = mapped_column(ForeignKey("deliveries.id"), nullable=True, index=True)
+
+    gate: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    material_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Whatever paperwork the driver presented: invoice, delivery challan, or
+    # gate pass number issued elsewhere.
+    document_reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    # Weighbridge readings. Stored as measured rather than as a signed delta
+    # so a disputed net weight can be traced back to the two readings that
+    # produced it. `net_weight` is derived on write (gross - tare).
+    gross_weight: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
+    tare_weight: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
+    net_weight: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
+
+    entry_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    exit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+    # MANUAL or ANPR — which one wrote the plate. Worth keeping: it is the
+    # only way to measure whether the camera is earning its place.
+    capture_method: Mapped[str] = mapped_column(String(20), default="MANUAL")
+
+    recorded_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    exit_recorded_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
