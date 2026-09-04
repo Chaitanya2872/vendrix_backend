@@ -134,6 +134,42 @@ Common vendor fields:
 | GET | /deliveries/{delivery_id} | Fetch a delivery | Requires authentication |
 | PATCH | /deliveries/{delivery_id} | Update a delivery | Requires `ADMIN` or `OPERATOR` |
 
+### Vehicle entries (gate register)
+
+Inward and outward vehicle movements across a site gate. One record covers a
+whole visit: `direction` says whether the vehicle is bringing material in
+(`INWARD`) or taking it out (`OUTWARD`), `entry_at` is when it arrived and
+`exit_at` when it left. A visit with no `exit_at` has status `IN_PREMISES`.
+
+| Method | Path | Description | Notes |
+| --- | --- | --- | --- |
+| GET | /vehicle-entries | List movements | Filters: `direction`, `status`, `purpose`, `gate`, `vendor_id`, `vehicle_id`, `registration_number`, `entry_from`, `entry_to`, `q`, `limit`, `offset` |
+| POST | /vehicle-entries | Record a gate-in | Requires `ADMIN`, `OPERATOR`, or `SECURITY` |
+| GET | /vehicle-entries/on-premises | Vehicles currently inside, oldest first | Optional `gate` |
+| GET | /vehicle-entries/summary | Gate dashboard counts for the current UTC day | Requires authentication |
+| GET | /vehicle-entries/{entry_id} | Fetch one movement | Requires authentication |
+| PATCH | /vehicle-entries/{entry_id} | Correct or cancel a movement | Requires `ADMIN`, `OPERATOR`, or `SECURITY` |
+| POST | /vehicle-entries/{entry_id}/exit | Sign the vehicle out | Requires `ADMIN`, `OPERATOR`, or `SECURITY` |
+| GET | /vehicle-entries/vehicle/{registration_number}/history | Visit history for one plate | Reports whether it is inside now |
+
+Entry fields:
+- `direction` — `INWARD` or `OUTWARD`
+- `purpose` — `DELIVERY`, `PICKUP`, `SERVICE`, `TRANSFER`, `VISITOR`, `OTHER`
+- `registration_number` — normalised to uppercase alphanumerics; required unless `vehicle_id` is given
+- `vehicle_id`, `vendor_id`, `driver_id`, `purchase_id`, `delivery_id` — optional links
+- `driver_name`, `driver_phone` — the person on the pass, whether or not they are a registered driver
+- `gate`, `document_reference`, `material_description`, `remarks`
+- `gross_weight`, `tare_weight` — weighbridge readings; `net_weight` is derived as gross minus tare
+- `entry_at` — defaults to the time the request is handled
+- `capture_method` — `MANUAL` or `ANPR`
+
+Behaviour worth knowing:
+- A plate that already has an open visit returns `409` naming the open entry number.
+- Signing a vehicle out twice returns `409`; an exit earlier than the entry returns `422`.
+- Gross below tare returns `422` rather than storing a negative net weight.
+- A plate that is not in the fleet registry is accepted and reported with `vehicle_registered: false`.
+- Gate-in and gate-out are written to the audit log as `GATE_IN` and `GATE_OUT`.
+
 ### Approvals
 
 | Method | Path | Description | Notes |
@@ -168,6 +204,10 @@ Supported upload extensions:
 | --- | --- | --- | --- |
 | POST | /anpr/lookup | Lookup a vehicle by registration number | Requires authentication |
 | POST | /anpr/recognize | Recognize a plate from an uploaded image | Requires authentication |
+
+Both ANPR responses also carry the gate context for the plate — `on_premises`,
+the `open_entry` if there is one, and a `suggested_action` of `GATE_IN` or
+`GATE_OUT` — so one camera read can drive either half of a visit.
 
 ### Reports
 

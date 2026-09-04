@@ -154,12 +154,22 @@ def _read_pdf(path: Path, on_page) -> tuple[OcrDocument, list[dict]]:
     analysis = pdf_service.analyse(path)
     pages: list[OcrPage] = []
 
-    ocr_pages = [page for page in analysis.pages if page.needs_ocr]
+    all_ocr_pages = [page for page in analysis.pages if page.needs_ocr]
+    limit = settings.ocr_max_pages if settings.ocr_max_pages > 0 else len(all_ocr_pages)
+    ocr_pages = all_ocr_pages[:limit]
+    selected_ocr_pages = {page.page_number for page in ocr_pages}
+    if len(ocr_pages) < len(all_ocr_pages):
+        logger.info(
+            "structured_extraction.ocr_page_limit_applied pages=%s read=%s",
+            len(all_ocr_pages), len(ocr_pages),
+        )
     completed = 0
 
     for page in analysis.pages:
         if not page.needs_ocr:
             pages.append(page.native)
+            continue
+        if page.page_number not in selected_ocr_pages:
             continue
         prepared = image_preprocessing_service.preprocess(
             page.image,

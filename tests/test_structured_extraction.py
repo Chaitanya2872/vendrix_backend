@@ -5,17 +5,53 @@ states a layout a vendor actually uses. The claim under test is that the same
 code reads all of them without knowing any of them.
 """
 from decimal import Decimal
+from types import SimpleNamespace
 
 import fitz
 import pytest
 
 from app.modules.invoices.services import structured_extraction_service as structured
+from app.modules.ocr.dto import OcrPage, SOURCE_NATIVE
 
 # Checksum-valid GSTINs, so validation findings in these tests come from the
 # extraction rather than from placeholder numbers.
 KARNATAKA_SELLER = "29AAGCB7383J1Z4"
 KARNATAKA_BUYER = "29AAECS1234K1Z9"
 MAHARASHTRA_BUYER = "27AAPFU0939F1ZV"
+
+
+def test_pdf_ocr_respects_the_configured_page_limit(monkeypatch, tmp_path):
+    scanned = [
+        SimpleNamespace(page_number=number, needs_ocr=True, image=f"image-{number}", native=None)
+        for number in range(1, 5)
+    ]
+    native = OcrPage(page_number=5, width=100, height=100, source=SOURCE_NATIVE)
+    analysis = SimpleNamespace(
+        pages=[*scanned, SimpleNamespace(page_number=5, needs_ocr=False, image=None, native=native)],
+        decisions=lambda: [],
+    )
+    recognised: list[int] = []
+
+    monkeypatch.setattr(structured.settings, "ocr_max_pages", 2)
+    monkeypatch.setattr(structured.pdf_service, "analyse", lambda _path: analysis)
+    monkeypatch.setattr(
+        structured.image_preprocessing_service,
+        "preprocess",
+        lambda image, **_kwargs: SimpleNamespace(
+            image=image, applied=[], rotation_applied=0,
+        ),
+    )
+
+    def recognize(_image, page_number, **_kwargs):
+        recognised.append(page_number)
+        return OcrPage(page_number=page_number, width=100, height=100)
+
+    monkeypatch.setattr(structured.ocr_service, "recognize_page", recognize)
+
+    document, _ = structured._read_pdf(tmp_path / "scan.pdf", None)
+
+    assert recognised == [1, 2]
+    assert [page.page_number for page in document.pages] == [1, 2, 5]
 
 
 def build_pdf(tmp_path, lines, name="invoice.pdf", pages=1):
